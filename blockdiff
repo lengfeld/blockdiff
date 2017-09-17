@@ -1,0 +1,1258 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+#   blockdiff - block based binary patch tool
+#
+#   Copyright (C) 2017 Stefan Lengfeld <contact@stefanchrist.eu>
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 2 of the License, or
+#   (at your option) version 3 of the License. See also README.md.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+import os
+import sys
+import hashlib
+import struct
+import binascii
+from itertools import count
+from argparse import ArgumentParser
+from collections import namedtuple
+
+
+__VERSION__ = "0.1.y"
+
+
+__FILE_MAGIC_HEADER__ = b"BD\xdb\xf7"
+__FILE_MAGIC_FOOTER__ = b"BD\xdb\xf8"
+
+
+__EXIT_CODE_TARGET_CHECKSUM_MISMATCH__ = 5     # See also `blockdiff.md`
+__EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__ = 6   # See also `blockdiff.md`
+__EXIT_CODE_SOURCE_FILE_DATA_CORRUPTION__ = 7  # See also `blockdiff.md`
+
+
+# value 0 is reserved in __checksum_types__
+__checksum_types__ = {"MD5": 2,
+                      "SHA1": 3,
+                      "SHA256": 4,
+                      "SHA512": 5}
+
+
+__checksum_lengths__ = {"MD5": 16,
+                        "SHA1": 20,
+                        "SHA256": 32,
+                        "SHA512": 64}
+
+
+def toHex(b):
+    # Note: using binascii.hexlify(), because bytes.hex() is only available
+    # since python 3.5.
+    return binascii.hexlify(b).decode("ascii")
+
+
+class NonZeroPadding(Exception):
+    pass
+
+
+# Rename into MismatchCRC or Datacorruption.  The CRC32 is not invalid. Some
+# bytes are corrupted in container.
+class InvalidCRC(Exception):
+    pass
+
+
+class InvalidMagic(Exception):
+    pass
+
+
+def readContainer(fd, magic):
+    """
+     Container format:
+          4 bytes          magic  ['B', 'D', '\xdb', '\xf7']
+          4 bytes uint32le length of payload. Up to (2^32 - 8 - 4) bytes allowed
+          n bytes          payload
+        0-7 bytes          of zero padding. End of container must be 8 bytes aligned.
+          4 bytes uint32le CRC32
+
+     * Container format can store up to (2^32 - 8 - 4) bytes of payload. Minus
+       magic, length and CRC field.
+     * Automatic internal padding at end of payload to story the whole container 8
+       bytes/64 bits aligned.
+     * CRC32 checksum is calculate over all fields (magic, length, payload,
+       padding) except the checksum itself.
+     * There is no user defined version number in the container format. The
+       version schema should be defined by your application.
+     * All numbers in the fields (length and CRC32) are stored little endian.
+    """
+    if not isinstance(magic, bytes):
+        raise ValueError("Magic must be of type bytes")
+    if len(magic) != 4:
+        raise ValueError("Magic must be exactly four bytes long")
+
+    bytes_read = 0
+
+    # Read and check magic number
+    magic_in_file = fd.read(4)
+    bytes_read += len(magic_in_file)
+    if len(magic_in_file) != 4:
+        raise EarlyEOFReached("Cannot read four bytes for magic number in file. EOF reached!")
+
+    if magic_in_file != magic:
+        raise InvalidMagic("Invalid magic number %s. Expected magic %s!" % (magic_in_file, magic))
+
+    # Read and parse length field
+    length_in_file_uint32le = fd.read(4)
+    bytes_read += len(length_in_file_uint32le)
+    if len(magic_in_file) != 4:
+        raise EarlyEOFReached("Cannot read four bytes for length. EOF reached!")
+
+    length_payload = struct.unpack("<I", length_in_file_uint32le)[0]
+    assert 0 <= length_payload < 2**32
+    # if length_payload:
+    #     raise Exception("here")
+    # Add upper bound check
+
+    # Read payload
+    payload = fd.read(length_payload)
+    bytes_read += len(payload)
+    if len(payload) != length_payload:
+        raise EarlyEOFReached("tbd")
+
+    # Calculate size of padding
+    length_padding = 8 - (length_payload + 4) % 8  # add four bytes to payload length for CRC32 field
+    if length_padding == 8:
+        length_padding = 0
+    assert 0 <= length_padding < 8
+    assert (length_payload + length_padding + 4) % 8 == 0
+
+    # Read padding
+    if length_padding != 0:
+        padding = fd.read(length_padding)
+        bytes_read += len(padding)
+        if len(padding) != length_padding:
+            raise EarlyEOFReached("Cannot read %d byte(s) of padding" % (length_padding,))
+    else:
+        padding = b""
+
+    # Read CRC32
+    crc32_in_file_uint32le = fd.read(4)
+    bytes_read += len(crc32_in_file_uint32le)
+    if len(crc32_in_file_uint32le) != 4:
+        raise EarlyEOFReached("tbd")
+
+    crc32_in_file = struct.unpack("<I", crc32_in_file_uint32le)[0]
+    assert 0 <= crc32_in_file < 2**32
+
+    magic_legnth_payload_padding_in_file = magic_in_file + length_in_file_uint32le + payload + padding
+    assert len(magic_legnth_payload_padding_in_file) == 8 + length_payload + length_padding
+
+    crc32 = binascii.crc32(magic_legnth_payload_padding_in_file)
+    assert isinstance(crc32, int)
+    assert 0 <= crc32 < 2**32
+
+    if crc32 != crc32_in_file:
+        raise InvalidCRC("Expected CRC32 %d (bytes %s). Computed CRC32 %d (bytes %s)!" %
+                         (crc32_in_file,
+                          struct.pack("<I", crc32_in_file),
+                          crc32,
+                          struct.pack("<I", crc32)))
+
+    # The padding bytes are checked after the CRC32 of the whole container is
+    # checked.
+    if any(byte != 0 for byte in padding):
+        raise NonZeroPadding("Non zero padding bytes in padding: %s" % (padding,))
+
+    return payload, bytes_read
+
+
+# FIXME Maybe rewrite to return only a bytes object instead of writing
+# directory to a file descriptor. See packContainer().
+def writeContainer(fd, magic, payload):
+    if not isinstance(magic, bytes):
+        raise ValueError("Magic must be of type bytes")
+    if len(magic) != 4:
+        raise ValueError("Magic must be exactly four bytes long")
+
+    size = 0
+
+    length_payload = len(payload)
+    if length_payload > (2**32 - 8 - 4):
+        raise ValueError("Playload is to long. %d bytes cannot be stored in the container format!" % (length_payload,))
+
+    fd.write(magic)
+    size += 4
+
+    length_payload_uint32le = struct.pack("<I", length_payload)
+    assert len(length_payload_uint32le) == 4
+    fd.write(length_payload_uint32le)
+    size += 4
+
+    # Writing payload
+    fd.write(payload)
+    size += len(payload)
+
+    # Calc and write padding
+    length_padding = 8 - ((length_payload + 4) % 8)  # add four bytes to payload length for CRC32 field
+    if length_padding == 8:
+        length_padding = 0
+    assert 0 <= length_padding < 8
+    assert (length_payload + length_padding + 4) % 8 == 0
+
+    padding = b"\0" * length_padding
+    fd.write(padding)
+    size += len(padding)
+
+    magic_length_payload_padding = magic + length_payload_uint32le + payload + padding
+
+    # Calc and write CRC
+    crc32 = binascii.crc32(magic_length_payload_padding)
+    crc32_uint32le = struct.pack("<I", crc32)
+    fd.write(crc32_uint32le)
+    size += 4
+
+    return size
+
+
+class AligmentError(Exception):
+    pass
+
+
+def readSource(filename, blocksize, checksum_type, stdoutAllowed=False):
+    block_zero = bytes([0] * blocksize)
+    assert len(block_zero) == blocksize
+
+    block_ones = bytes([0xff] * blocksize)
+    assert len(block_ones) == blocksize
+
+    source_hashtable = {}
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print("Reading source '%s':" % (filename,))
+
+    # Using 's.stat(filename).st_size' does not work for block devices.
+    with open(filename, "br") as f:
+        source_filesize = f.seek(0, 2)
+
+    if source_filesize % blocksize != 0:
+        raise AligmentError("Source file '%s' is not block aligned. %d byte(s) left and blocksize is %d byte(s)!" % (filename, source_filesize % blocksize, blocksize))
+
+    source_checksum_m = getChecksumGenerator(checksum_type)
+
+    percent_lasttime = None   # Speed optimization for statusbar
+
+    with open(filename, "br") as f:
+        for i in count():
+            block = f.read(blocksize)
+            if len(block) == 0:
+                break  # EOF reached
+
+            # Feed block to hashlib checksum generator
+            source_checksum_m.update(block)
+
+            if len(block) != blocksize:
+                # Should be already catched above, when the size of the source
+                # file has not changed in the meantime.
+                raise AligmentError("Source file is not block aligned")
+
+            if block == block_zero or block == block_ones:
+                # Ignore zero blocks and all one blocks in the source file. Do
+                # not store them in the hashtable. The patch file format has an
+                # extra command_type to write a zero/ones block into the target
+                # file.
+                #
+                # Since zero blocks (and ones blocks) are so common, this also
+                # saves memory in the hashtable.
+                pass
+            else:
+                block_md5sum = hashlib.md5(block).hexdigest()
+
+                try:
+                    block_indices, source_block_crc32 = source_hashtable[block_md5sum]
+                    if len(block_indices) >= 3:
+                        # Don't save multiple blocks, because the patch file
+                        # generator uses at most one to three different copies.
+                        # For now it uses only one copy.
+                        pass
+                    else:
+                        block_indices.append(i)  # Updates list *in-place*
+
+                    # print(block_indices, "duplicate_block", file=sys.stderr)
+                except KeyError:
+                    source_block_crc32 = binascii.crc32(block)
+                    source_hashtable[block_md5sum] = ([i], source_block_crc32)
+
+            if stdoutAllowed and sys.stdout.isatty():
+                LENGHT = 50
+                # Using (i + 1), so the last iteration is 100%.
+                percent = (100 * blocksize * (i + 1)) // source_filesize
+
+                # Speed optimiziation. Only update the statusbar when the
+                # percent value has really hanged. Doing a write operation to
+                # stdout every iteration slows done the program by a couple of
+                # seconds.
+                if percent != percent_lasttime:
+                    print("|" + "-" * (percent // 2) + " " * (LENGHT - percent // 2) + "| (%3d %%)\r" % (percent,), end="")
+                    percent_lasttime = percent
+
+        source_blockcount = i
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print()
+
+    source_checksum = source_checksum_m.digest()
+
+    return source_hashtable, source_blockcount, source_checksum
+
+
+def getChecksumGenerator(checksum_type):
+    if checksum_type == "MD5":
+        checksum_m = hashlib.md5()
+    elif checksum_type == "SHA1":
+        checksum_m = hashlib.sha1()
+    elif checksum_type == "SHA256":
+        checksum_m = hashlib.sha256()
+    elif checksum_type == "SHA512":
+        checksum_m = hashlib.sha512()
+    else:
+        raise ValueError("Checksum-type '%s' unknown!" % (checksum_type,))
+
+    return checksum_m
+
+
+def readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=False):
+    """ returns a entry generator object. First, last element and the element
+        before the last element are special:
+           [Header, command(type=!stop)*, command(type=stop), Footer]
+    """
+    block_zero = bytes([0] * blocksize)
+    assert len(block_zero) == blocksize
+
+    block_ones = bytes([0xff] * blocksize)
+    assert len(block_ones) == blocksize
+
+    blocks_zero = 0
+    blocks_ones = 0
+    blocks_copy = 0
+    blocks_new = 0
+    blocks_count = 0
+
+    target_checksum_m = getChecksumGenerator(checksum_type)
+
+    yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print("Reading target '%s' and writing patch. Block statistics:" % (target,))
+
+    def printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new):
+        # NOTE: Percentage values and output format should be the nearly
+        # the same as for command "info".
+        print("%10d (%6.02f %%) zero   %10d (%6.02f %%) ones  %10d (%6.02f %%) copyable  %10d (%6.02f %%) new\r" %
+              (blocks_zero, blocks_zero * 100 / blocks_count,
+               blocks_ones, blocks_ones * 100 / blocks_count,
+               blocks_copy, blocks_copy * 100 / blocks_count,
+               blocks_new, blocks_new * 100 / blocks_count),
+              end="")
+
+    for i in count():
+        # FIXME Add code to read exactly a byte buffer of size 'blocksize'. Not
+        # less.
+        block = target_fd.read(blocksize)
+        if len(block) == 0:
+            break  # EOF reached
+
+        if len(block) != blocksize:
+            raise Exception("Target file is not block aligned. Some bytes left at the end")
+
+        # Feed block to hashlib checksum generator for checksum in footer
+        target_checksum_m.update(block)
+
+        md5sum = hashlib.md5(block).hexdigest()
+
+        # Decided with patch command to emit
+        if block == block_zero:
+            yield ("z",)
+            blocks_zero += 1
+        elif block == block_ones:
+            yield ("o",)
+            blocks_ones += 1
+        elif md5sum in source_hashtable:
+            # NOTE: Selection of source block should be deterministic
+            block_indices, source_block_crc32 = source_hashtable[md5sum]
+            source_block_index = block_indices[0]  # just take the first element
+
+            # FIXME read source block <source_block_index> and verify that it's identical
+            # to the target block in <block>. Paranoid guy: don't rely on the checksum.
+
+            yield ("c", source_block_crc32, source_block_index)
+            blocks_copy += 1
+        else:
+            yield ("w", block)
+            blocks_new += 1
+
+        blocks_count = i + 1
+
+        if stdoutAllowed and sys.stdout.isatty():
+            # Update the statistic every 1000 iteration to avoid stdout write
+            # calls.  A 2 GiB ext4 disk images has 524288 blocks by a blocksize
+            # of 4KiB, so there are 524 statistic updates while reading the
+            # target file.
+            if (i + 1) % 1000 == 0:
+                printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new)
+
+    # After the loop print the statistics a last time, because the loop does
+    # not update the statistic every iteration.
+    if stdoutAllowed and sys.stdout.isatty():
+        if blocks_count >= 1:
+            printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new)
+            print()  # Print a newline character, because printStat() does not do it.
+
+    yield ("s",)  # Emit command(type=stop)
+
+    target_checksum = target_checksum_m.digest()
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print("%s checksum of target file: %s" %
+              (checksum_type, toHex(target_checksum)))
+
+    yield Footer(target_checksum)
+
+
+class Header():
+    def __init__(self, blocksize, source_blockcount, checksum_type, source_checksum):
+        assert isinstance(source_checksum, bytes)
+        assert isinstance(checksum_type, str)
+        # FIXME add file size limitations
+        self._blocksize = blocksize
+        self._source_blockcount = source_blockcount
+
+        if checksum_type not in __checksum_lengths__.keys():
+            raise ValueError("Checksum type '%s' not supported!." % (checksum_type,))
+        self._checksum_type = checksum_type
+
+        checksum_length = __checksum_lengths__[checksum_type]
+        if len(source_checksum) != checksum_length:
+            raise ValueError("Checksum '%s' is not %d bytes long!" % (source_checksum, checksum_length))
+        self._source_checksum = source_checksum
+
+    def getBlocksize(self):
+        return self._blocksize
+
+    def getSourceBlockCount(self):
+        return self._source_blockcount
+
+    def getChecksumType(self):
+        return self._checksum_type
+
+    def getSourceChecksum(self):
+        return self._source_checksum
+
+    # Only used in unittests
+    def __eq__(self, y):
+        if not isinstance(y, self.__class__):
+            return False
+
+        return self._blocksize == y._blocksize and \
+            self._source_blockcount == y._source_blockcount and \
+            self._checksum_type == y._checksum_type and \
+            self._source_checksum == y._source_checksum
+
+    # Only used in unittests
+    def __repr__(self):
+        return "Header(%s, %s, %s, %s)" % (self._blocksize,
+                                           self._source_blockcount,
+                                           self._checksum_type,
+                                           self._source_checksum)
+
+
+class Footer():
+    def __init__(self, target_checksum):
+        assert isinstance(target_checksum, bytes)
+        self._target_checksum = target_checksum
+
+    def getTargetChecksum(self):
+        return self._target_checksum
+
+    # Only used in unittests
+    def __eq__(self, y):
+        if not isinstance(y, self.__class__):
+            return False
+
+        return self._target_checksum == y._target_checksum
+
+    # Only used in unittests
+    def __repr__(self):
+        return "Footer(%s)" % (self._target_checksum,)
+
+
+# Format (maybe outdated, not precise):
+#
+#  Header:
+#    - u8 version (1: standard)
+#    - u8 checksum type (see above)  'T'
+#    - u32le blocksize
+#    - u32le source block count (not all inputs are really required)
+#    # Putting the target block count in the header is impossible, because
+#    # the 'target' file in the command 'patch' can be a stream.
+#    - u8[64] checksum[T] of source file
+#          For MD5 only the first 16 bytes are used. The rest is set to zero.
+#          For SHA512 the full 64 bytes are used.
+#  commands:
+#    - u8 type (0: stop, 1: ones, 2: zero, 3: copy, 4: new)
+#       - plus payload
+#  Footer:
+#    - u32le add CRC32 of command stream
+#    - u8[64] checksum[T] of target file
+#          For MD5 only the first 16 bytes are used. The rest is set to zero.
+#          For SHA512 the full 64 bytes are used.
+#       (This is located at the end of the file. This way the patch-file must
+#       only be traversed once, no seek to the beginngin is required)
+def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
+    """Consumes a patch entry generator, encodes it and writes it to the
+       patchfile.
+    """
+
+    header = next(entry_stream)
+    assert isinstance(header, Header)
+
+    blocksize = header.getBlocksize()
+    source_blockcount = header.getSourceBlockCount()
+    checksum_type = header.getChecksumType()
+    source_checksum = header.getSourceChecksum()
+
+    patch_file_version = 1
+    checksum_type_number = __checksum_types__[checksum_type]
+
+    assert 0 <= patch_file_version < 256
+    assert 0 <= blocksize < 2 ** 32
+    assert 0 <= source_blockcount < 2 ** 32
+    assert 0 <= checksum_type_number < 256
+    header_payload = struct.pack("<BIIB",
+                                 patch_file_version,
+                                 blocksize,
+                                 source_blockcount,
+                                 checksum_type_number)
+    header_payload += source_checksum
+    source_checksum_padding = b"\0" * (64 - len(source_checksum))
+    header_payload += source_checksum_padding
+
+    # Header payload is always 74 bytes long
+    assert len(header_payload) == 10 + 64
+
+    writeContainer(patch_fd, __FILE_MAGIC_HEADER__, header_payload)
+
+    commands_crc32 = 0  # Initial value for CRC32
+
+    # NOTE New naming convention "entry generator for [header, command, command(=stop), footer]"
+    for command in entry_stream:
+        if command[0] == "z":
+            entry = b"\x02"
+        elif command[0] == "o":
+            entry = b"\x01"
+        elif command[0] == "c":
+            _, source_block_crc32, source_block_index = command
+
+            if not (0 <= source_block_index < 2**32):
+                raise Exception("Block number %d does not fit in 16 bits" % (source_block_index,))
+
+            # Using '<' enforces little endian and standard sizes
+            entry = b"\x03"
+            entry += struct.pack("<II", source_block_crc32, source_block_index)
+        elif command[0] == "w":
+            _, block = command
+
+            entry = b"\x04" + block
+        elif command[0] == "s":
+            # Read stop command. End of command stream reached.
+            entry = b"\x00"  # Write Command(type=stop)
+        else:
+            raise Exception("Never reached")
+
+        patch_fd.write(entry)
+        commands_crc32 = binascii.crc32(entry, commands_crc32)
+
+        if entry == b"\x00":
+            assert command[0] == "s"
+            break  # Stop Command reached and stop command written
+
+    footer = next(entry_stream)
+    assert isinstance(footer, Footer)
+
+    target_checksum = footer.getTargetChecksum()
+
+    commands_crc32_uint32le = struct.pack("<I", commands_crc32)
+
+    footer_payload = b""
+    footer_payload += commands_crc32_uint32le
+    footer_payload += target_checksum
+
+    target_checksum_padding = b"\0" * (64 - len(target_checksum))
+    footer_payload += target_checksum_padding
+
+    # Footer playload is always 64 bytes long.
+    assert len(footer_payload) == 68
+
+    writeContainer(patch_fd, __FILE_MAGIC_FOOTER__, footer_payload)
+
+    return 0
+
+
+def diff(args, parser):
+    source = args.source
+    target = args.target
+    patch = args.patch  # FIXME rename, because it has the same name as the function
+    blocksize = args.blocksize
+    checksum_type = args.checksum_type
+    silent = args.silent
+
+    # Sanitize checksum_type value from user
+    checksum_type = checksum_type.upper()
+    if checksum_type not in __checksum_types__.keys():
+        print("ERROR: Value '%s' is not a valid checksum type!" %
+              (checksum_type,),
+              file=sys.stderr)
+        return 64   # EX_USAGE. See /usr/include/sysexits.h
+
+    if silent:
+        stdoutAllowed = False
+    else:
+        # If patch is written to stdout the functions readSource and
+        # readTargetAndGenPatchCommands should not make stdout output.
+        if patch == "-":
+            # The program writes the patch to stdout. Every other output to stdout
+            # must be avoided.
+            stdoutAllowed = False
+        else:
+            stdoutAllowed = True
+
+    # Phase One: Read source file and generate checksum hashtable
+    try:
+        source_hashtable, source_blockcount, source_checksum = readSource(source, blocksize, checksum_type, stdoutAllowed=stdoutAllowed)
+    except AligmentError as e:
+        print("ERROR:", e, file=sys.stderr)
+        return 1
+
+    if stdoutAllowed:
+        print("%s checksum of source file: %s" %
+              (checksum_type, toHex(source_checksum)))
+
+    # Phase Two: Generate and write patch
+    if target != "-":
+        # FIXME Catch exceptions
+        target_fd = open(target, "br")
+    else:
+        target_fd = sys.stdin.buffer
+
+    if patch != "-":
+        # FIXME Catch exceptions
+        patch_fd = open(patch, "bw")  # Truncates existing files
+    else:
+        patch_fd = sys.stdout.buffer
+
+    # Start writing patch file
+    with open(source, "br") as source_fd:
+        entry_stream = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=stdoutAllowed)
+
+        # File `source` still needs to be opened while generating the patch
+        # file. Some blocks are reread.
+        writePatch(entry_stream, patch_fd, stdoutAllowed=stdoutAllowed)
+
+    if target != "-":
+        target_fd.close()
+
+    if patch != "-":
+        patch_fd.close()
+
+    return 0
+
+
+class EarlyEOFReached(Exception):
+    pass
+
+
+# FIXME combine both errors cases
+class InvalidFormat(Exception):
+    pass
+
+
+class FileFormatError(Exception):
+    pass
+
+
+class DataCorruption(Exception):
+    pass
+
+
+def readPatch(patch_fd, filesize_hacky_list=[]):
+    """Returns a command stream generator
+
+    Raises exception
+        - InvalidMagic when file <patch_fd> is not a patch file
+        - DataCorruption in patch file
+    """
+
+    def myread(fd, size):
+        buf = fd.read(size)
+        if len(filesize_hacky_list) >= 1:
+            filesize_hacky_list[0] += len(buf)
+        return buf
+
+    # Function readContainer() raises InvalidMagic when the magic numbers was
+    # not found.
+    try:
+        header_payload, bytes_read = readContainer(patch_fd, __FILE_MAGIC_HEADER__)
+    except InvalidCRC as e:
+        raise DataCorruption("Invalid CRC32 in header: %s" % (e,))
+
+    # HACK HACKY: increase filesize counter, because readContainer does not do
+    # it.
+    if len(filesize_hacky_list) >= 1:
+        filesize_hacky_list[0] += bytes_read
+
+    if len(header_payload) != 10 + 64:
+        raise FileFormatError("Header payload must be 74 bytes long")
+
+    header_payload_fixed_entries = header_payload[:10]
+    header_payload_checksum = header_payload[10:]
+
+    x = struct.unpack("<BIIB", header_payload_fixed_entries)
+    patch_file_version = x[0]
+    blocksize = x[1]
+    source_blockcount = x[2]
+    checksum_type_number = x[3]
+
+    if patch_file_version != 1:
+        raise FileFormatError("tbd")
+
+    if checksum_type_number not in __checksum_types__.values():
+        raise FileFormatError("tbd")
+    else:
+        # HACKY
+        checksum_type = None
+        for key, value in __checksum_types__.items():
+            if value == checksum_type_number:
+                checksum_type = key
+        assert checksum_type in __checksum_lengths__
+
+    checksum_length = __checksum_lengths__[checksum_type]
+    source_checksum = header_payload_checksum[:checksum_length]
+
+    source_checksum_padding = header_payload_checksum[checksum_length:]
+    if not all(i == 0 for i in source_checksum_padding):
+        raise FileFormatError("Source checkums padding is not zero: %s!" % (source_checksum_padding,))
+
+    yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
+
+    commands_crc32 = 0  # Initial value for CRC32
+
+    while True:
+        # Read entries until we reached the footer structure in the file.
+        # Here we don't know a priori how many entries the target file contains.
+        command_type = myread(patch_fd, 1)
+        commands_crc32 = binascii.crc32(command_type, commands_crc32)
+
+        if len(command_type) == 0:
+            raise EarlyEOFReached("Cannot read next command. No stop command found.")
+
+        if command_type == b"\x00":
+            yield ('s',)  # emit command(type=stop)
+            break  # Stop reading command entries
+        elif command_type == b"\x02":
+            yield ('z',)  # write zero block
+        elif command_type == b"\x01":
+            yield ('o',)  # write ones block
+        elif command_type == b"\x03":
+            # Copy block
+            source_block_encoded = myread(patch_fd, 8)
+            commands_crc32 = binascii.crc32(source_block_encoded, commands_crc32)
+
+            if len(source_block_encoded) != 8:
+                raise EarlyEOFReached("Cannot read source block information in command(type=copy).")
+
+            source_block_crc32, source_block_index = struct.unpack("<II",
+                                                                   source_block_encoded)
+
+            if not 0 <= source_block_index < source_blockcount:
+                raise DataCorruption("Source block index %d in command(type=copy) corrupted. Source file has only %d block(s)!" %
+                                     (source_block_index, source_blockcount))
+
+            yield ('c', source_block_crc32, source_block_index)
+        elif command_type == b"\x04":
+            # New block
+            block = myread(patch_fd, blocksize)
+            commands_crc32 = binascii.crc32(block, commands_crc32)
+            if len(block) != blocksize:
+                raise EarlyEOFReached("Cannot block data in command(type=write).")
+
+            yield ('w', block)
+        else:
+            # An unknown command type is also some sort of data corruption.
+            # Maybe caused by a single bitflip in the patch file. Nevertheless
+            # a invalid command type byte is goint to be also detected by the
+            # command CRC32 checksum stored in the footer structure.
+            raise DataCorruption("Unkown command type: %s" % (command_type,))
+
+    # Read footer structure
+    try:
+        footer_payload, bytes_read = readContainer(patch_fd, __FILE_MAGIC_FOOTER__)
+    except InvalidMagic:
+        # Do not raise InvalidMagic magic for the footer structure. The
+        # function should only raises InvalidMagic for the header structure. A invalid
+        # footer structure is just a normal data corruption error in the file.
+        # FIXME add read and expected bytes in message
+        raise DataCorruption("Invalid magic number in footer. Corrupted file?")
+    except InvalidCRC as e:
+        raise DataCorruption("Invalid CRC32 in footer: %s" % (e,))
+
+    # HACK HACKY: increase filesize counter, because readContainer does not do
+    # it.
+    if len(filesize_hacky_list) >= 1:
+        filesize_hacky_list[0] += bytes_read
+
+    if len(footer_payload) != 68:
+        raise FileFormatError("Footer payload must be 68 bytes long")
+
+    checksum_length = __checksum_lengths__[checksum_type]
+
+    commands_crc32_in_file_uint32le = footer_payload[:4]
+    target_checksum = footer_payload[4:4 + checksum_length]
+    target_checksum_padding = footer_payload[4 + checksum_length:]
+
+    if not all(i == 0 for i in target_checksum_padding):
+        raise FileFormatError("Target checkums padding is not zero: %s!" % (target_checksum_padding,))
+
+    commands_crc32_in_file = struct.unpack("<I", commands_crc32_in_file_uint32le)[0]
+
+    if commands_crc32_in_file != commands_crc32:
+        raise DataCorruption("Corrupted bytes in the command stream. Computed CRC32 is %d (bytes %s). Expected CRC32 is %d (bytes %s)!" %
+                             (commands_crc32,
+                              struct.pack("<I", commands_crc32),
+                              commands_crc32_in_file,
+                              struct.pack("<I", commands_crc32_in_file)))
+
+    yield Footer(target_checksum)
+
+
+def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
+    entry_stream = readPatch(patch_fd)
+
+    header = next(entry_stream)
+    assert isinstance(header, Header)
+    blocksize = header.getBlocksize()
+    source_blockcount = header.getSourceBlockCount()
+    checksum_type = header.getChecksumType()
+
+    target_checksum_m = getChecksumGenerator(checksum_type)
+
+    block_zero = b"\0" * blocksize
+    assert len(block_zero) == blocksize
+
+    block_ones = b"\xff" * blocksize
+    assert len(block_ones) == blocksize
+
+    for i, command in enumerate(entry_stream):
+        if command[0] == 's':
+            # Read command(type=stop)
+            break
+        elif command[0] == 'z':
+            block = block_zero  # write zero block
+        elif command[0] == 'o':
+            block = block_ones  # write ones block
+        elif command[0] == 'c':
+            # Copy block from source
+            _, source_block_crc32, source_block_index = command
+
+            source_fd.seek(source_block_index * blocksize)
+            block = source_fd.read(blocksize)
+            # FIXME Check read size
+
+            block_crc32_from_file = binascii.crc32(block)
+            if block_crc32_from_file != source_block_crc32:
+                print("ERROR: Cannot copy source block %d to block %d in target file. Source block CRC32 is %d, expected %d!" %
+                      (source_block_index + 1,
+                       i + 1,
+                       block_crc32_from_file,
+                       source_block_crc32),
+                      file=sys.stderr)
+
+                ret = __EXIT_CODE_SOURCE_FILE_DATA_CORRUPTION__
+                return ret
+        elif command[0] == 'w':
+            # New block in target file. Write data from patch file.
+            _, block = command
+            assert len(block) == blocksize
+        else:
+            raise Exception("Unknown command: %s" % (command[0],))
+
+        # Feed block to hashlib checksum generator
+        target_checksum_m.update(block)
+
+        target_fd.write(block)
+
+    footer = next(entry_stream)
+    assert isinstance(footer, Footer)
+
+    # Get checksum of target file
+    target_checksum = target_checksum_m.digest()
+
+    if target_checksum != footer.getTargetChecksum():
+        print("ERROR: Checksum of generated target file (%s: %s) does not match the original checksum of the target file (%s: %s)!" %
+              (checksum_type,
+               toHex(target_checksum),
+               checksum_type,
+               toHex(footer.getTargetChecksum())),
+              file=sys.stderr)
+        ret = __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__
+    else:
+        ret = 0
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print("%s Checksum of target file: %s" %
+              (checksum_type, toHex(target_checksum)))
+
+    return ret
+
+
+def patch(args, parser):
+    source = args.source
+    patch = args.patch  # FIXME rename, because it has the same name as the function
+    target = args.target
+    silent = args.silent
+
+    if silent:
+        stdoutAllowed = False
+    else:
+        if patch != '-':
+            stdoutAllowed = True
+        else:
+            stdoutAllowed = False
+
+    if patch != "-":
+        patch_fd = open(patch, "br")
+    else:
+        patch_fd = sys.stdin.buffer
+
+    if target != "-":
+        target_fd = open(target, "bw")
+    else:
+        target_fd = sys.stdout.buffer
+
+    if stdoutAllowed and sys.stdout.isatty():
+        print("Writing target '%s':" % (target,))
+
+    # Source opened and must be seekable, but maybe not used at all.
+    try:
+        with open(source, "br") as source_fd:
+            ret = applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=stdoutAllowed)
+    except InvalidMagic as e:
+        print("ERROR: File `%s` is not a blockdiff patch file: %s"
+              % (patch, e),
+              file=sys.stderr)
+        ret = 1
+    except DataCorruption as e:
+        print("ERROR: %s" % (e,), file=sys.stderr)
+        ret = __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__
+
+    if patch != "-":
+        patch_fd.close()
+
+    if target != "-":
+        target_fd.close()
+
+    return ret
+
+
+def printInfo(patch_fd):
+    # Phase I): Reading the patch file
+    filesize_hacky_list = [0]
+    entry_stream = readPatch(patch_fd, filesize_hacky_list=filesize_hacky_list)
+
+    header = next(entry_stream)
+    assert isinstance(header, Header)
+    blocksize = header.getBlocksize()
+    source_blockcount = header.getSourceBlockCount()
+    checksum_type = header.getChecksumType()
+    source_checksum = header.getSourceChecksum()
+
+    zero_blocks = 0
+    ones_blocks = 0
+    copy_blocks = 0
+    new_blocks = 0
+    target_blockcount = 0
+    for command in entry_stream:
+        if command[0] == 's':
+            # Exit loop and do not count as a target_block. End of commands
+            # reached.
+            break  # Command(type=stop)
+
+        target_blockcount += 1
+        if command[0] == 'z':
+            zero_blocks += 1
+        elif command[0] == 'o':
+            ones_blocks += 1
+        elif command[0] == 'c':
+            copy_blocks += 1
+        elif command[0] == 'w':
+            new_blocks += 1
+        else:
+            raise Exception("Unknown command: %s" % (command[0],))
+    # FIXME verify target_blockcount/That EOF is reached
+
+    footer = next(entry_stream)
+    assert isinstance(footer, Footer)
+    target_checksum = footer.getTargetChecksum()
+
+    # FIXME The readPatch() generator should return the current
+    # file position/already read bytes another way! Using the mutbale list
+    # as passed-by-ref workaround is HACKY.
+    patch_filesize = filesize_hacky_list[0]
+
+    if patch != "-":
+        patch_fd.close()
+
+    # Phase II): Writing information and statistics
+    print("blocksize", blocksize, "B"),
+    print("source-blocks %6i" % (source_blockcount,))
+    print("checksum-type", checksum_type)
+    print("source-checksum", toHex(source_checksum))
+
+    source_filesize = source_blockcount * blocksize
+    target_filesize = target_blockcount * blocksize
+
+    # NOTE: target_blockcount can be zero, when the target file is zero bytes
+    # in the size.
+    if target_blockcount == 0:
+        assert zero_blocks == 0
+        assert ones_blocks == 0
+        assert copy_blocks == 0
+        assert new_blocks == 0
+        zero_blocks_percentage = 0.0
+        ones_blocks_percentage = 0.0
+        copy_blocks_percentage = 0.0
+        new_blocks_percentage = 0.0
+    else:
+        zero_blocks_percentage = zero_blocks * 100 / target_blockcount
+        ones_blocks_percentage = ones_blocks * 100 / target_blockcount
+        copy_blocks_percentage = copy_blocks * 100 / target_blockcount
+        new_blocks_percentage = new_blocks * 100 / target_blockcount
+
+    print("target-blocks %6i" % (target_blockcount,))
+    print("target-checksum", toHex(target_checksum))
+
+    print("zero-blocks   %6i (%6.02f %%)" % (zero_blocks, zero_blocks_percentage))
+    print("ones-blocks   %6i (%6.02f %%)" % (ones_blocks, ones_blocks_percentage))
+    print("copy-blocks   %6i (%6.02f %%)" % (copy_blocks, copy_blocks_percentage))
+    print("new-blocks    %6i (%6.02f %%)" % (new_blocks, new_blocks_percentage))
+    print("source-filesize %10i B (%7.01f MiB)" % (source_filesize, source_filesize // 1024**2))
+    print("patch-filesize  %10i B (%7.01f MiB)" % (patch_filesize, patch_filesize // 1024**2))
+    print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))
+
+    if target_filesize != 0:
+        saved_bytes = target_filesize - patch_filesize
+        percentage = 100 * saved_bytes / target_filesize
+        print("Saving %i B (%6.02f %%) compared to sending the target file." % (saved_bytes, percentage))
+    else:
+        print("Target file is 0 bytes in size. Not saving anything.")
+
+    return 0
+
+
+def info(args, parser):
+    patch = args.patch  # FIXME rename, because it has the same name as the function
+
+    if patch != "-":
+        patch_fd = open(patch, "br")
+    else:
+        patch_fd = sys.stdin.buffer
+
+    try:
+        ret = printInfo(patch_fd)
+    except InvalidMagic as e:
+        print("ERROR: File `%s` is not a blockdiff patch file: %s"
+              % (patch, e),
+              file=sys.stderr)
+        ret = 1
+    except DataCorruption as e:
+        print("ERROR: %s" % (e,), file=sys.stderr)
+        ret = __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__
+
+    return ret
+
+
+ExtSuperblock = namedtuple("ExtSuperblock", ["s_blocks_count_lo",
+                                             "s_feature_compat",
+                                             "s_feature_incompat",
+                                             "s_log_block_size"])
+
+
+class ExtMagicNotFound(Exception):
+    pass
+
+
+# Documentation:
+#
+def parseExtSuperblock(superblock):
+    """Parse 1024 byte ext superblock and return a fields
+          s_blocks_count,
+          s_feature_compat,
+          s_feature_incompat and
+          s_log_block_size
+    as a namedtuple.
+
+    The ext superblock format is documented here:
+        https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#The_Super_Block
+
+    Function raises exceptions:
+        - ExtMagicNotFound() when the superblock is not a ext superblock.
+    """
+    assert isinstance(superblock, bytes)
+    assert len(superblock) == 1024
+
+    s_magic_le16 = superblock[0x38:0x38 + 2]
+    s_magic = struct.unpack("<H", s_magic_le16)[0]
+
+    if s_magic != 0xEF53:
+        raise ExtMagicNotFound("Magic number in file 0x%04x does not match ext magic number 0xEF53!" % (s_magic,))
+
+    # NOTE: It seems that the filed s_checksum is always zero.
+    #  s_checksum_le32 = superblock[1020:1024]
+    #  s_checksum = struct.unpack("<I", s_checksum_le32)[0]
+    #  print(s_checksum)
+
+    s_blocks_count_lo_le32 = superblock[0x4:0x4 + 4]
+    s_blocks_count_lo = struct.unpack("<I", s_blocks_count_lo_le32)[0]
+
+    s_feature_compat_le32 = superblock[0x5C:0x5C + 4]
+    s_feature_compat = struct.unpack("<I", s_feature_compat_le32)[0]
+
+    s_feature_incompat_le32 = superblock[0x60:0x60 + 4]
+    s_feature_incompat = struct.unpack("<I", s_feature_incompat_le32)[0]
+
+    # Documentation:
+    #      blocks are in the range of 1KiB and 64KiB
+    #      (See https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Blocks)
+    #
+    # But infact only 1, 2 and 4 KiB are allowed.
+    #
+    # Formula Block size is 2 ^ (10 + s_log_block_size)
+    s_log_block_size_le32 = superblock[0x18:0x18 + 4]
+    s_log_block_size = struct.unpack("<I", s_log_block_size_le32)[0]
+
+    ext_superblock = ExtSuperblock(s_blocks_count_lo=s_blocks_count_lo,
+                                   s_feature_compat=s_feature_compat,
+                                   s_feature_incompat=s_feature_incompat,
+                                   s_log_block_size=s_log_block_size)
+
+    return ext_superblock
+
+
+def extinfo(args, parser):
+    filepath = args.filepath
+
+    with open(filepath, "br") as f:
+        f.seek(1024)
+        superblock = f.read(1024)
+        if len(superblock) != 1024:
+            print("ERROR: Cannot read 1024 bytes for superblock!",
+                  file=sys.stderr)
+            return 1
+
+    try:
+        ext_superblock = parseExtSuperblock(superblock)
+    except ExtMagicNotFound as e:
+        print("ERROR: %s" % (e,), file=sys.stderr)
+        return 1
+
+    # Documentation:
+    #       Block size is 2 ^ (10 + s_log_block_size)
+    blocksize = 2 ** (10 + ext_superblock.s_log_block_size)
+    print("blocksize", blocksize, sep="\t")
+
+    size = ext_superblock.s_blocks_count_lo * blocksize
+    print("total size", size, sep="\t")
+
+    return 0
+
+
+def version():
+    print("blockdiff", __VERSION__)
+    return 0
+
+
+def nocommand(args, parser):
+    parser.print_help(file=sys.stdout)
+    return 64   # EX_USAGE. See /usr/include/sysexits.h
+
+
+def main():
+    parser = ArgumentParser(description="Generate and apply patch files for block based file or disk formats",
+                            epilog="""Licensed under *GPLv2* and *GPLv3*. See https://www.gnu.org/licenses/.
+Homepage: https://www.stefanchrist.eu/projects/blockdiff
+""")
+    parser.add_argument("--version", dest="version",
+                        action="store_true", default=False,
+                        help="print program's version")
+    subparsers = parser.add_subparsers()
+
+    parser_diff = subparsers.add_parser("diff", help="tbd")
+    parser_diff.set_defaults(func=diff)
+    parser_diff.add_argument(dest="source", type=str,
+                             help="Filepath to source file.")
+    parser_diff.add_argument(dest="target", type=str,
+                             help="Filepath for target file or '-' to read from stdin.")
+    parser_diff.add_argument(dest="patch", type=str,
+                             help="File to write the patch or '-' to write to stdout. Existing files will be overwritten.")
+    parser_diff.add_argument("--blocksize", dest="blocksize", type=int,
+                             default=4 * 1024,
+                             help="Blocksize in bytes (default: 4096 B = 4 KiB)")
+    parser_diff.add_argument("--checksum-type", dest="checksum_type", type=str,
+                             default="SHA1",
+                             help="Checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
+    parser_diff.add_argument("-s", "--slient", dest="silent", action='store_true',
+                             default=False,
+                             help="Don't print verbose output on stdout")
+
+    parser_patch = subparsers.add_parser("patch", help="tbd")
+    parser_patch.set_defaults(func=patch)
+    parser_patch.add_argument(dest="source", type=str, help="tbd")
+    parser_patch.add_argument(dest="patch", type=str,
+                              help="Path to patch or '-' to read from stdin.")
+    parser_patch.add_argument(dest="target", type=str,
+                              help="File to write the output or '-' to write to stdout. Existing files will be overwritten.")
+    parser_patch.add_argument("-s", "--slient", dest="silent", action='store_true',
+                              default=False,
+                              help="Don't print verbose output on stdout")
+
+    parser_info = subparsers.add_parser("info", help="tbd")
+    parser_info.set_defaults(func=info)
+    parser_info.add_argument(dest="patch", type=str,
+                             help="Path to patch or '-' to read from stdin.")
+
+    parser_extinfo = subparsers.add_parser("extinfo", help="Print blocksize and size of a ext2,3,4 filesystem image (Or just use 'dumpe2fs')")
+    parser_extinfo.set_defaults(func=extinfo)
+    parser_extinfo.add_argument(dest="filepath", type=str,
+                                help="Path to ext2,3,4 filesystem image (device path or file).")
+
+    args = parser.parse_args()
+
+    if args.version:
+        ret = version()
+    else:
+        # Workaround for help
+        if hasattr(args, "func"):
+            ret = args.func(args, parser)
+        else:
+            ret = nocommand(args, parser)
+    return ret
+
+
+if __name__ == "__main__":
+    sys.exit(main())

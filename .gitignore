@@ -1,0 +1,5 @@
+*.sw?
+__pycache__
+/blockdiff.html
+/blockdiff.1
+/README.html

@@ -691,12 +691,14 @@ class DataCorruption(Exception):
     pass
 
 
-def readPatch(patch_fd, filesize_hacky_list=[]):
+def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     """Returns a command stream generator
 
     Raises exception
         - InvalidMagic when file <patch_fd> is not a patch file
-        - DataCorruption in patch file
+        - DataCorruption when the patch file is corrupted
+        - DataCorruption when <error_on_no_eof> is true and file/stream in
+          <patch_fd> contains bytes after the footer entry.
     """
 
     def myread(fd, size):
@@ -838,6 +840,13 @@ def readPatch(patch_fd, filesize_hacky_list=[]):
                               commands_crc32_in_file,
                               struct.pack("<I", commands_crc32_in_file)))
 
+    # Must be before the last yield statement. Otherwise consumer never reaches
+    # the code.
+    if error_on_no_eof:
+        after_footer = patch_fd.read(1)
+        if len(after_footer) != 0:
+            raise DataCorruption("No EOF after footer entry. Additional bytes at end of patch file!")
+
     yield Footer(target_checksum)
 
 
@@ -973,7 +982,7 @@ def patch(args, parser):
 def printInfo(patch_fd):
     # Phase I): Reading the patch file
     filesize_hacky_list = [0]
-    entry_stream = readPatch(patch_fd, filesize_hacky_list=filesize_hacky_list)
+    entry_stream = readPatch(patch_fd, filesize_hacky_list=filesize_hacky_list, error_on_no_eof=True)
 
     header = next(entry_stream)
     assert isinstance(header, Header)

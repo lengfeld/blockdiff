@@ -444,6 +444,22 @@ class TestReadPatch(unittest.TestCase):
                 patch_fd = BytesStream(patch_corrupted)
                 self.assertRaises(DataCorruption, list, readPatch(patch_fd))
 
+    def testDataCorruptionExhaustive(self):
+        # Create binary patch.
+        entry_stream = [Header(2, 0, "SHA1", b"A" * 20),
+                        ('s',),
+                        Footer(b"B" * 20)]
+
+        patch_fd = BytesStreamWriter()
+        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        patch = patch_fd.getBuffer()
+
+        # Add some additional bytes at the end of the binary patch
+        patch += b"abc"
+
+        patch_fd = BytesStream(patch)
+        self.assertRaises(DataCorruption, list, readPatch(patch_fd, error_on_no_eof=True))
+
 
 class TestPatch(TestCaseTempFolder):
     def testNonPatchFile(self):
@@ -843,6 +859,28 @@ Target file is 0 bytes in size. Not saving anything.
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
                          b"ERROR: Invalid CRC32 in header: Expected CRC32 4271503841 (bytes b'\\xe1\\xf9\\x99\\xfe'). Computed CRC32 2580729403 (bytes b';\\xce\\xd2\\x99')!\n")
+
+    def testNoEOFAtEndOfPatchFile(self):
+        # Create binary patch. Target file will be b"\0\0".
+        entry_stream = [Header(2, 0, "SHA1", b"A" * 20),
+                        ('z',),
+                        ('s',),
+                        Footer(b"B" * 20)]
+        patch_fd = BytesStreamWriter()
+        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        patch = patch_fd.getBuffer()
+
+        # Add additional bytes at end of patch
+        patch += b"abc"
+
+        # Execute `blockdiff` with corrupted patch file.
+        p = Popen([BLOCKDIFF, "info", "-"], stdin=PIPE, stderr=PIPE)
+        _, stderr = p.communicate(patch)
+
+        # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
+        self.assertEqual(p.returncode, 6)
+        self.assertEqual(stderr,
+                         b"ERROR: No EOF after footer entry. Additional bytes at end of patch file!\n")
 
 
 class TestDiffAndPatch(TestCaseTempFolder):

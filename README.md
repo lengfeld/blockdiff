@@ -199,8 +199,3 @@ available in the source file.
 Add multiple source blocks in the command copy. Detect data corruption in the
 source file and fallback to another block. This should make the patch operation
 more resitents against bit errors on the storage media.
-
-Test EOFs in `blockdiff patch` for the source file. Too short
-
-Test EOF in `blockdiff patch/info` for patch file. It should not have extra
-padding bytes after the footer structure. Warn the user about that.

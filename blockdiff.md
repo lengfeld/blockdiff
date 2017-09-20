@@ -69,14 +69,20 @@ returns the exit code `7`. Note: In that case any number of blocks of the
 target file is written out already. You should not trusted the target file and
 invalidate it at once.
 
+Additional bytes at the end of the patch file are tolerated. No EOF needed.
+
 
 ## info
 
 Argument 'patch' is the patch to read the patch file or '-' to read the patch
-directly from stidn.
+directly from stdin.
 
 If the consumed patch file is corrupted, e.g. contains a bitflip, the command
 aborts, prints an error message on stderr and returns the exit code `6`.
+
+If the consumed patch file contains additional bytes after the footer entry in
+the patch file (no EOF reached), the command aborts, prints an error message on
+stderr and returns the exit code `6`.
 
 
 ## extinfo

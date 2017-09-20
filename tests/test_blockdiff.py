@@ -633,7 +633,7 @@ class TestPatch(TestCaseTempFolder):
         p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
                   stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
-        # Special exit code __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__
+        # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
                          b"ERROR: Invalid CRC32 in header: Expected CRC32 4271503841 (bytes b'\\xe1\\xf9\\x99\\xfe'). Computed CRC32 2580729403 (bytes b';\\xce\\xd2\\x99')!\n")
@@ -839,7 +839,7 @@ Target file is 0 bytes in size. Not saving anything.
                   stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
 
-        # Special exit code __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__
+        # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
                          b"ERROR: Invalid CRC32 in header: Expected CRC32 4271503841 (bytes b'\\xe1\\xf9\\x99\\xfe'). Computed CRC32 2580729403 (bytes b';\\xce\\xd2\\x99')!\n")

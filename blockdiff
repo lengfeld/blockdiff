@@ -982,10 +982,10 @@ def printInfo(patch_fd):
     checksum_type = header.getChecksumType()
     source_checksum = header.getSourceChecksum()
 
-    zero_blocks = 0
-    ones_blocks = 0
-    copy_blocks = 0
-    new_blocks = 0
+    blocks_zero = 0
+    blocks_ones = 0
+    blocks_copy = 0
+    blocks_new = 0
     target_blockcount = 0
     for command in entry_stream:
         if command[0] == 's':
@@ -995,13 +995,13 @@ def printInfo(patch_fd):
 
         target_blockcount += 1
         if command[0] == 'z':
-            zero_blocks += 1
+            blocks_zero += 1
         elif command[0] == 'o':
-            ones_blocks += 1
+            blocks_ones += 1
         elif command[0] == 'c':
-            copy_blocks += 1
+            blocks_copy += 1
         elif command[0] == 'w':
-            new_blocks += 1
+            blocks_new += 1
         else:
             raise Exception("Unknown command: %s" % (command[0],))
     # FIXME verify target_blockcount/That EOF is reached
@@ -1030,27 +1030,27 @@ def printInfo(patch_fd):
     # NOTE: target_blockcount can be zero, when the target file is zero bytes
     # in the size.
     if target_blockcount == 0:
-        assert zero_blocks == 0
-        assert ones_blocks == 0
-        assert copy_blocks == 0
-        assert new_blocks == 0
-        zero_blocks_percentage = 0.0
-        ones_blocks_percentage = 0.0
-        copy_blocks_percentage = 0.0
-        new_blocks_percentage = 0.0
+        assert blocks_zero == 0
+        assert blocks_ones == 0
+        assert blocks_copy == 0
+        assert blocks_new == 0
+        blocks_zero_percentage = 0.0
+        blocks_ones_percentage = 0.0
+        blocks_copy_percentage = 0.0
+        blocks_new_percentage = 0.0
     else:
-        zero_blocks_percentage = zero_blocks * 100 / target_blockcount
-        ones_blocks_percentage = ones_blocks * 100 / target_blockcount
-        copy_blocks_percentage = copy_blocks * 100 / target_blockcount
-        new_blocks_percentage = new_blocks * 100 / target_blockcount
+        blocks_zero_percentage = blocks_zero * 100 / target_blockcount
+        blocks_ones_percentage = blocks_ones * 100 / target_blockcount
+        blocks_copy_percentage = blocks_copy * 100 / target_blockcount
+        blocks_new_percentage = blocks_new * 100 / target_blockcount
 
     print("target-blocks %6i" % (target_blockcount,))
     print("target-checksum", toHex(target_checksum))
 
-    print("zero-blocks   %6i (%6.02f %%)" % (zero_blocks, zero_blocks_percentage))
-    print("ones-blocks   %6i (%6.02f %%)" % (ones_blocks, ones_blocks_percentage))
-    print("copy-blocks   %6i (%6.02f %%)" % (copy_blocks, copy_blocks_percentage))
-    print("new-blocks    %6i (%6.02f %%)" % (new_blocks, new_blocks_percentage))
+    print("blocks-zero   %6i (%6.02f %%)" % (blocks_zero, blocks_zero_percentage))
+    print("blocks-ones   %6i (%6.02f %%)" % (blocks_ones, blocks_ones_percentage))
+    print("blocks-copy   %6i (%6.02f %%)" % (blocks_copy, blocks_copy_percentage))
+    print("blocks-new    %6i (%6.02f %%)" % (blocks_new, blocks_new_percentage))
     print("source-filesize %10i B (%7.01f MiB)" % (source_filesize, source_filesize // 1024**2))
     print("patch-filesize  %10i B (%7.01f MiB)" % (patch_filesize, patch_filesize // 1024**2))
     print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))

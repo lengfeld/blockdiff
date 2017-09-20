@@ -706,10 +706,10 @@ checksum-type SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      4
 target-checksum 0000000000000000000000000000000000000000
-zero-blocks        1 ( 25.00 %)
-ones-blocks        1 ( 25.00 %)
-copy-blocks        1 ( 25.00 %)
-new-blocks         1 ( 25.00 %)
+blocks-zero        1 ( 25.00 %)
+blocks-ones        1 ( 25.00 %)
+blocks-copy        1 ( 25.00 %)
+blocks-new         1 ( 25.00 %)
 source-filesize          6 B (    0.0 MiB)
 patch-filesize         183 B (    0.0 MiB)
 target-filesize          8 B (    0.0 MiB)
@@ -740,10 +740,10 @@ checksum-type SHA512
 source-checksum 01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101
 target-blocks      4
 target-checksum 02020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202
-zero-blocks        1 ( 25.00 %)
-ones-blocks        1 ( 25.00 %)
-copy-blocks        1 ( 25.00 %)
-new-blocks         1 ( 25.00 %)
+blocks-zero        1 ( 25.00 %)
+blocks-ones        1 ( 25.00 %)
+blocks-copy        1 ( 25.00 %)
+blocks-new         1 ( 25.00 %)
 source-filesize          6 B (    0.0 MiB)
 patch-filesize         183 B (    0.0 MiB)
 target-filesize          8 B (    0.0 MiB)
@@ -772,10 +772,10 @@ checksum-type SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      2
 target-checksum 0000000000000000000000000000000000000000
-zero-blocks        1 ( 50.00 %)
-ones-blocks        0 (  0.00 %)
-copy-blocks        0 (  0.00 %)
-new-blocks         1 ( 50.00 %)
+blocks-zero        1 ( 50.00 %)
+blocks-ones        0 (  0.00 %)
+blocks-copy        0 (  0.00 %)
+blocks-new         1 ( 50.00 %)
 source-filesize          0 B (    0.0 MiB)
 patch-filesize         173 B (    0.0 MiB)
 target-filesize          4 B (    0.0 MiB)
@@ -807,10 +807,10 @@ checksum-type SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      0
 target-checksum 0000000000000000000000000000000000000000
-zero-blocks        0 (  0.00 %)
-ones-blocks        0 (  0.00 %)
-copy-blocks        0 (  0.00 %)
-new-blocks         0 (  0.00 %)
+blocks-zero        0 (  0.00 %)
+blocks-ones        0 (  0.00 %)
+blocks-copy        0 (  0.00 %)
+blocks-new         0 (  0.00 %)
 source-filesize          6 B (    0.0 MiB)
 patch-filesize         169 B (    0.0 MiB)
 target-filesize          0 B (    0.0 MiB)

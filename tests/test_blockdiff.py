@@ -489,7 +489,7 @@ class TestPatch(TestCaseTempFolder):
         p = Popen([BLOCKDIFF, "patch", "-s", "source", "-", "target"], stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
         self.assertEqual(p.returncode, 1)
-        self.assertIn(b"ERROR: File `-` is not a blockdiff patch file:", stderr)
+        self.assertIn(b"ERROR: File `-` is not a valid patch file:", stderr)
 
     def testApplySmallPatch(self):
         dir = join(self.tmpdir, "testApplySmallPatch")
@@ -728,7 +728,7 @@ class TestInfo(TestCaseTempFolder):
         p = Popen([BLOCKDIFF, "info", "-"], stdin=PIPE, stderr=PIPE)
         _, stderr = p.communicate(patch)
         self.assertEqual(p.returncode, 1)
-        self.assertIn(b"ERROR: File `-` is not a blockdiff patch file:", stderr)
+        self.assertIn(b"ERROR: File `-` is not a valid patch file:", stderr)
 
     def testMinimal(self):
         # Create binary patch file

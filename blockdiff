@@ -971,7 +971,7 @@ def patch(args, parser):
         with open(source, "br") as source_fd:
             ret = applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=stdoutAllowed)
     except InvalidMagic as e:
-        print("ERROR: File `%s` is not a blockdiff patch file: %s"
+        print("ERROR: File `%s` is not a valid patch file: %s"
               % (patch, e),
               file=sys.stderr)
         ret = 1
@@ -1097,7 +1097,7 @@ def info(args, parser):
     try:
         ret = printInfo(patch_fd)
     except InvalidMagic as e:
-        print("ERROR: File `%s` is not a blockdiff patch file: %s"
+        print("ERROR: File `%s` is not a valid patch file: %s"
               % (patch, e),
               file=sys.stderr)
         ret = 1

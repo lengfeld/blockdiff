@@ -18,13 +18,13 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
 import os
-import unittest
+import sys
 import hashlib
 import binascii
-from subprocess import Popen, PIPE
+import unittest
 from os.path import join, realpath, dirname
+from subprocess import Popen, PIPE
 
 path = realpath(__file__)
 sys.path.append(join(dirname(path), "../"))

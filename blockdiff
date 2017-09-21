@@ -18,14 +18,13 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
 import os
 import sys
-import hashlib
 import struct
+import hashlib
 import binascii
-from itertools import count
 from argparse import ArgumentParser
+from itertools import count
 from collections import namedtuple
 
 

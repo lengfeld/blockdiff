@@ -40,7 +40,7 @@ class TestCaseTempFolder(unittest.TestCase):
 
 # Providing function read() and seek() to emulate a file object for the unit
 # tests.
-class BytesStream():
+class BytesStreamReader():
     def __init__(self, b):
         self._b = b
         self._pos = 0

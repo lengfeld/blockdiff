@@ -29,7 +29,7 @@ from os.path import join, realpath, dirname
 path = realpath(__file__)
 sys.path.append(join(dirname(path), "../"))
 
-from helpers import TestCaseTempFolder, BytesStream, BytesStreamWriter
+from helpers import TestCaseTempFolder, BytesStreamReader, BytesStreamWriter
 
 BLOCKDIFF = join(dirname(path), "..", "blockdiff")
 
@@ -52,7 +52,7 @@ def packContainer(magic, data):
 class TestReadContainer(unittest.TestCase):
     def testNoPayload(self):
         __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStream(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x80_z\x94")
+        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x80_z\x94")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"")
         self.assertEqual(bytes_read, 16)
@@ -62,12 +62,12 @@ class TestReadContainer(unittest.TestCase):
         # Note: The zero padding bytes are checked after the CRC32 of the wohle
         # container is checked. Therfore the following container has a valid
         # CRC32, but invalid padding bytes.
-        fd = BytesStream(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\xff\0" + b"\xf2\xa2^\x07")
+        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\xff\0" + b"\xf2\xa2^\x07")
         self.assertRaises(NonZeroPadding, readContainer, fd, __MAGIC__)
 
     def testOneBytePayload(self):
         __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStream(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa8\xcf\xcdi")
+        fd = BytesStreamReader(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa8\xcf\xcdi")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"\x42")
         self.assertEqual(bytes_read, 16)
@@ -75,7 +75,7 @@ class TestReadContainer(unittest.TestCase):
     def testZeroPadding(self):
         __MAGIC__ = b"BD\xdb\xf7"
         # Using 12 bytes of payload results in zero padding added.
-        fd = BytesStream(__MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\xab\x92x\xec")
+        fd = BytesStreamReader(__MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\xab\x92x\xec")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"123456789012")
         self.assertEqual(bytes_read, 24)
@@ -85,14 +85,14 @@ class TestReadContainer(unittest.TestCase):
         # Note: The InvalidCRC execption is raised, before the zero padding is
         # checked. So hence the following container as a non-zero padding, the
         # first failure mode is the invalid CRC32.
-        fd = BytesStream(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\xff\0" + b"\xff\xff\xff\xff")
+        fd = BytesStreamReader(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\xff\0" + b"\xff\xff\xff\xff")
         self.assertRaises(InvalidCRC, readContainer, fd, __MAGIC__)
 
     def testInvalidMagic(self):
         __MAGIC__ = b"BD\xdb\xf7"
         # The InvalidMagic exceptions is raised very early. Providing a full
         # container not needed, just the first four bytes are sufficient.
-        fd = BytesStream(b"aabb" + b"...")
+        fd = BytesStreamReader(b"aabb" + b"...")
         self.assertRaises(InvalidMagic, readContainer, fd, __MAGIC__)
 
 
@@ -152,7 +152,7 @@ class TestReadTargetAndGenPatchCommands(unittest.TestCase):
     def testCopyWriteAndZeroEntry(self):
         # Create dummy dictionary for source file
         blocksize = 2
-        source_fd = BytesStream(b"aabb")
+        source_fd = BytesStreamReader(b"aabb")
         source_hashtable = {hashlib.md5(b"aa").hexdigest(): ([0], binascii.crc32(b"aa")),
                             hashlib.md5(b"bb").hexdigest(): ([1], binascii.crc32(b"bb"))}
         checksum_type = "SHA1"
@@ -160,7 +160,7 @@ class TestReadTargetAndGenPatchCommands(unittest.TestCase):
         source_checksum = hashlib.sha1(b"aabb").digest()
         target_filepath = "some-filename"
         target = b"bbcc\0\0\xff\xff"
-        target_fd = BytesStream(target)
+        target_fd = BytesStreamReader(target)
         commands = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
 
         target_checksum = hashlib.sha1(target).digest()
@@ -176,14 +176,14 @@ class TestReadTargetAndGenPatchCommands(unittest.TestCase):
     def testZeroLengthTarget(self):
         # Create dummy dictionary for source file
         blocksize = 2
-        source_fd = BytesStream(b"aabb")
+        source_fd = BytesStreamReader(b"aabb")
         source_hashtable = {}   # can be empty for tests
         checksum_type = "SHA1"
         source_blockcount = 2
         source_checksum = hashlib.sha1(b"aabb").digest()
         target_filepath = "some-filename"
         target = b""
-        target_fd = BytesStream(target)
+        target_fd = BytesStreamReader(target)
         commands = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
 
         target_checksum = hashlib.sha1(target).digest()
@@ -280,7 +280,7 @@ class TestReadPatch(unittest.TestCase):
         # The rest of the file can be ignored, because the function readPatch  aborts after
         # reading the magci number.
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(InvalidMagic, list, readPatch(patch_fd))
 
     def testInvalidFooterMagic(self):
@@ -302,7 +302,7 @@ class TestReadPatch(unittest.TestCase):
         # Function `readPatch` aborts after reading a invalid footer magic. No
         # further bytes are needed.
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(DataCorruption, list, readPatch(patch_fd))
 
     def testNormal(self):
@@ -329,7 +329,7 @@ class TestReadPatch(unittest.TestCase):
         #         Container CRC32 checksum
         patch += b"\xbf\x9e6i"
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
 
         entries = list(readPatch(patch_fd))
         self.assertEqual(entries, [Header(2, 3, "SHA1", b"A" * 20),
@@ -345,7 +345,7 @@ class TestReadPatch(unittest.TestCase):
         # incorrect header length for patch file version '1'.
         patch = packContainer(b"BD\xdb\xf7", b"\x01" + b"invalid")
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
 
     def testInvalidFooterFormat(self):
@@ -372,7 +372,7 @@ class TestReadPatch(unittest.TestCase):
         #         Container CRC32 checksum
         patch += b'\x05$\x86Y'
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
 
     def testEarlyEOFReached(self):
@@ -389,19 +389,19 @@ class TestReadPatch(unittest.TestCase):
         # Test early EOF in copy entry
         patch = patch_header
         patch += b"\x02" + b"\x03\x02\x00"
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(EarlyEOFReached, list, readPatch(patch_fd))
 
         # Test early EOF in block-write entry
         patch = patch_header
         patch += b"\x02" + b"\x04"
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(EarlyEOFReached, list, readPatch(patch_fd))
 
         # Test missing stop entry at the end of the stream
         patch = patch_header
         patch += b"\x02"
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(EarlyEOFReached, list, readPatch(patch_fd))
 
     def testDataCorruptionExhaustive(self):
@@ -434,7 +434,7 @@ class TestReadPatch(unittest.TestCase):
                 patch_corrupted[i] = ~patch_corrupted[i] & 0xff  # Just inverse every bit
                 patch_corrupted = bytes(patch_corrupted)
 
-                patch_fd = BytesStream(patch_corrupted)
+                patch_fd = BytesStreamReader(patch_corrupted)
                 self.assertRaises(DataCorruption, list, readPatch(patch_fd))
 
     def testEarlyEOFReachedExhaustive(self):
@@ -452,7 +452,7 @@ class TestReadPatch(unittest.TestCase):
             with self.subTest(i=i):
                 patch_too_short = patch[:i]
 
-                patch_fd = BytesStream(patch_too_short)
+                patch_fd = BytesStreamReader(patch_too_short)
                 self.assertRaises(EarlyEOFReached, list, readPatch(patch_fd))
 
     def testDataCorruptionExhaustive(self):
@@ -468,7 +468,7 @@ class TestReadPatch(unittest.TestCase):
         # Add some additional bytes at the end of the binary patch
         patch += b"abc"
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(DataCorruption, list, readPatch(patch_fd, error_on_no_eof=True))
 
     def testUnsupportedPatchFileVersion(self):
@@ -477,7 +477,7 @@ class TestReadPatch(unittest.TestCase):
         # not matter as long it's not zero.
         patch = packContainer(b"BD\xdb\xf7", b"\x02xxxx")
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(UnsupportedFileVersion, list, readPatch(patch_fd))
 
     def testHeaderEntryOfZeroLength(self):
@@ -487,7 +487,7 @@ class TestReadPatch(unittest.TestCase):
         # entry containing the version number.
         patch = packContainer(b"BD\xdb\xf7", b"")
 
-        patch_fd = BytesStream(patch)
+        patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
 
 

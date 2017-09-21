@@ -678,11 +678,6 @@ class EarlyEOFReached(Exception):
     pass
 
 
-# FIXME combine both errors cases
-class InvalidFormat(Exception):
-    pass
-
-
 class FileFormatError(Exception):
     pass
 

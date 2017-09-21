@@ -48,7 +48,6 @@ check:                        ### Runs the pep8 source code checker
 
 .PHONY: install
 install:                      ### Installs program to $(prefix)/
-	@#FIXME: Install manpage
 	install -Dm 755 blockdiff.py $(DESTDIR)/$(prefix)/bin/blockdiff
 
 .PHONY:

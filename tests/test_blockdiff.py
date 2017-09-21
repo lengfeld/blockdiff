@@ -39,7 +39,7 @@ from blockdiff import (readPatch, EarlyEOFReached, readContainer,
                        writeContainer, readTargetAndGenPatchCommands, Header,
                        Footer, __FILE_MAGIC_FOOTER__, writePatch,
                        FileFormatError, parseExtSuperblock, DataCorruption,
-                       readSource)
+                       readSource, UnsupportedFileVersion)
 
 
 # FIXME move packContainer to blockdiff.py
@@ -344,13 +344,13 @@ class TestReadPatch(unittest.TestCase):
         # Create binary Patch file
         # Header:
         #         Magic          Length
-        patch = b"BD\xdb\xf7" + b"\x07\x00\x00\x00"
-        #         Some invalid payload
-        patch += b"invalid"
+        patch = b"BD\xdb\xf7" + b"\x08\x00\x00\x00"
+        #         version   some invalid payload
+        patch += b"\x01" + b"invalid"
         #         Container Zero padding
-        patch += b"\x00\x00\x00\x00\x00"
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\xfe\xee[\x9d"
+        patch += b'0\x90\x1d\xf1'
 
         patch_fd = BytesStream(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
@@ -459,6 +459,25 @@ class TestReadPatch(unittest.TestCase):
 
         patch_fd = BytesStream(patch)
         self.assertRaises(DataCorruption, list, readPatch(patch_fd, error_on_no_eof=True))
+
+    def testUnsupportedPatchFileVersion(self):
+        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # but has a different internal version number. The length field does
+        # not matter as long it's not zero.
+        patch = packContainer(b"BD\xdb\xf7", b"\x02xxxx")
+
+        patch_fd = BytesStream(patch)
+        self.assertRaises(UnsupportedFileVersion, list, readPatch(patch_fd))
+
+    def testHeaderEntryOfZeroLength(self):
+        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # but a header entry of zero length. That's a special case, because
+        # the patch file format needs a least a single byte of payload in the header
+        # entry containing the version number.
+        patch = packContainer(b"BD\xdb\xf7", b"")
+
+        patch_fd = BytesStream(patch)
+        self.assertRaises(FileFormatError, list, readPatch(patch_fd))
 
 
 class TestPatch(TestCaseTempFolder):
@@ -685,6 +704,26 @@ class TestPatch(TestCaseTempFolder):
         self.assertEqual(stderr,
                          b"ERROR: Cannot copy source block 3 to block 2 in target file. Source block CRC32 is 1373098901, expected 3685882489!\n")
 
+    def testNewerPatchFileFormat(self):
+        dir = join(self.tmpdir, "testNewerPatchFileFormat")
+        os.makedirs(dir, exist_ok=True)
+
+        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # but has a different internal version number. The length field does
+        # not matter as long it's not zero.
+        patch = packContainer(b"BD\xdb\xf7", b"\x03xxxx")
+
+        with open(join(dir, "source"), "bw") as f:
+            f.write(b"")
+
+        p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
+                  stdin=PIPE, stderr=PIPE, cwd=dir)
+        _, stderr = p.communicate(patch)
+
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(stderr,
+                         b"ERROR: Unsupported file format version '3'. Only file version '1' is supported!\n")
+
 
 class TestInfo(TestCaseTempFolder):
     def testNonPatchFile(self):
@@ -881,6 +920,20 @@ Target file is 0 bytes in size. Not saving anything.
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
                          b"ERROR: No EOF after footer entry. Additional bytes at end of patch file!\n")
+
+    def testNewerPatchFileFormat(self):
+        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # but has a different internal version number. The length field does
+        # not matter as long it's not zero.
+        patch = packContainer(b"BD\xdb\xf7", b"\x03xxxx")
+
+        # Execute `blockdiff` with corrupted patch file.
+        p = Popen([BLOCKDIFF, "info", "-"], stdin=PIPE, stderr=PIPE)
+        _, stderr = p.communicate(patch)
+
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(stderr,
+                         b"ERROR: Unsupported file format version '3'. Only file version '1' is supported!\n")
 
 
 class TestDiffAndPatch(TestCaseTempFolder):

@@ -691,6 +691,10 @@ class DataCorruption(Exception):
     pass
 
 
+class UnsupportedFileVersion(Exception):
+    pass
+
+
 def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     """Returns a command stream generator
 
@@ -699,6 +703,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
         - DataCorruption when the patch file is corrupted
         - DataCorruption when <error_on_no_eof> is true and file/stream in
           <patch_fd> contains bytes after the footer entry.
+        - UnsupportedFileVersion if the patch file format in <patch_fd> is
+          not equal to '1'. Other and newer formats are not supported.
     """
 
     def myread(fd, size):
@@ -719,6 +725,16 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     if len(filesize_hacky_list) >= 1:
         filesize_hacky_list[0] += bytes_read
 
+    if not len(header_payload) >= 1:
+        raise FileFormatError("Header entry does not contain patch format version information. Invalid patch file!")
+
+    patch_file_version = header_payload[0]   # :: int
+    if patch_file_version != 1:
+        raise UnsupportedFileVersion("Unsupported file format version '%d'. Only file version '1' is supported!" %
+                                     (patch_file_version,))
+
+    # After checking the patch file format version, check the length to match
+    # format expectation.
     if len(header_payload) != 10 + 64:
         raise FileFormatError("Header payload must be 74 bytes long")
 
@@ -726,13 +742,10 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     header_payload_checksum = header_payload[10:]
 
     x = struct.unpack("<BIIB", header_payload_fixed_entries)
-    patch_file_version = x[0]
+    # Ignore the file version number here, because it's already checked above.
     blocksize = x[1]
     source_blockcount = x[2]
     checksum_type_number = x[3]
-
-    if patch_file_version != 1:
-        raise FileFormatError("tbd")
 
     if checksum_type_number not in __checksum_types__.values():
         raise FileFormatError("tbd")
@@ -970,6 +983,9 @@ def patch(args, parser):
     except DataCorruption as e:
         print("ERROR: %s" % (e,), file=sys.stderr)
         ret = __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__
+    except UnsupportedFileVersion as e:
+        print("ERROR: %s" % (e,), file=sys.stderr)
+        ret = 1
 
     if patch != "-":
         patch_fd.close()
@@ -1093,6 +1109,9 @@ def info(args, parser):
     except DataCorruption as e:
         print("ERROR: %s" % (e,), file=sys.stderr)
         ret = __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__
+    except UnsupportedFileVersion as e:
+        print("ERROR: %s" % (e,), file=sys.stderr)
+        ret = 1
 
     return ret
 

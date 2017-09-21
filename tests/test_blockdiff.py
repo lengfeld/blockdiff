@@ -36,17 +36,10 @@ BLOCKDIFF = join(dirname(path), "..", "blockdiff")
 
 from blockdiff import (readPatch, EarlyEOFReached, readContainer,
                        NonZeroPadding, InvalidCRC, InvalidMagic,
-                       writeContainer, readTargetAndGenPatchCommands, Header,
+                       packContainer, readTargetAndGenPatchCommands, Header,
                        Footer, __FILE_MAGIC_FOOTER__, writePatch,
                        FileFormatError, parseExtSuperblock, DataCorruption,
                        readSource, UnsupportedFileVersion)
-
-
-# FIXME move packContainer to blockdiff.py
-def packContainer(magic, data):
-    fd = BytesStreamWriter()
-    writeContainer(fd, magic, data)
-    return fd.getBuffer()
 
 
 class TestReadContainer(unittest.TestCase):
@@ -96,33 +89,27 @@ class TestReadContainer(unittest.TestCase):
         self.assertRaises(InvalidMagic, readContainer, fd, __MAGIC__)
 
 
-class TestWriteContainer(unittest.TestCase):
+class TestPackContainer(unittest.TestCase):
     def testZeroLengthPayload(self):
         __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStreamWriter()
-        size = writeContainer(fd, __MAGIC__, b"")
-        self.assertEqual(size, 16)
-        self.assertEqual(len(fd.getBuffer()), 16)
-        self.assertEqual(fd.getBuffer(),
+        container = packContainer(__MAGIC__, b"")
+        self.assertEqual(len(container), 16)
+        self.assertEqual(container,
                          __MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x80_z\x94")
 
     def testOneBytePayload(self):
         __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStreamWriter()
-        size = writeContainer(fd, __MAGIC__, b"\x42")
-        self.assertEqual(size, 16)
-        self.assertEqual(len(fd.getBuffer()), 16)
-        self.assertEqual(fd.getBuffer(),
+        container = packContainer(__MAGIC__, b"\x42")
+        self.assertEqual(len(container), 16)
+        self.assertEqual(container,
                          __MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa8\xcf\xcdi")
 
     def testZeroPadding(self):
-        # Using 4 + 8 = 12 bytes of payload. In that case no zero-padding is added
+        # Using 4 + 8 = 12 bytes of payload. In that case no padding is needed.
         __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStreamWriter()
-        size = writeContainer(fd, __MAGIC__, b"123456789012")
-        self.assertEqual(size, 24)
-        self.assertEqual(len(fd.getBuffer()), 24)
-        self.assertEqual(fd.getBuffer(),
+        container = packContainer(__MAGIC__, b"123456789012")
+        self.assertEqual(len(container), 24)
+        self.assertEqual(container,
                          __MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\xab\x92x\xec")
 
 

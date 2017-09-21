@@ -110,12 +110,12 @@ def readContainer(fd, magic):
         raise InvalidMagic("Invalid magic number %s. Expected magic %s!" % (magic_in_file, magic))
 
     # Read and parse length field
-    length_in_file_uint32le = fd.read(4)
-    bytes_read += len(length_in_file_uint32le)
-    if len(length_in_file_uint32le) != 4:
+    length_payload_uint32le = fd.read(4)
+    bytes_read += len(length_payload_uint32le)
+    if len(length_payload_uint32le) != 4:
         raise EarlyEOFReached("Cannot read four bytes for length. EOF reached!")
 
-    length_payload = struct.unpack("<I", length_in_file_uint32le)[0]
+    length_payload = struct.unpack("<I", length_payload_uint32le)[0]
     assert 0 <= length_payload < 2**32
     # if length_payload:
     #     raise Exception("here")
@@ -152,7 +152,7 @@ def readContainer(fd, magic):
     crc32_in_file = struct.unpack("<I", crc32_in_file_uint32le)[0]
     assert 0 <= crc32_in_file < 2**32
 
-    magic_legnth_payload_padding_in_file = magic_in_file + length_in_file_uint32le + payload + padding
+    magic_legnth_payload_padding_in_file = magic_in_file + length_payload_uint32le + payload + padding
     assert len(magic_legnth_payload_padding_in_file) == 8 + length_payload + length_padding
 
     crc32 = binascii.crc32(magic_legnth_payload_padding_in_file)
@@ -174,52 +174,36 @@ def readContainer(fd, magic):
     return payload, bytes_read
 
 
-# FIXME Maybe rewrite to return only a bytes object instead of writing
-# directory to a file descriptor. See packContainer().
-def writeContainer(fd, magic, payload):
+def packContainer(magic, payload):
     if not isinstance(magic, bytes):
         raise ValueError("Magic must be of type bytes")
     if len(magic) != 4:
         raise ValueError("Magic must be exactly four bytes long")
 
-    size = 0
-
     length_payload = len(payload)
     if length_payload > (2**32 - 8 - 4):
         raise ValueError("Playload is to long. %d bytes cannot be stored in the container format!" % (length_payload,))
 
-    fd.write(magic)
-    size += 4
-
+    # Create length field as bytes
     length_payload_uint32le = struct.pack("<I", length_payload)
     assert len(length_payload_uint32le) == 4
-    fd.write(length_payload_uint32le)
-    size += 4
 
-    # Writing payload
-    fd.write(payload)
-    size += len(payload)
-
-    # Calc and write padding
+    # Calculate size of padding
     length_padding = 8 - ((length_payload + 4) % 8)  # add four bytes to payload length for CRC32 field
     if length_padding == 8:
         length_padding = 0
     assert 0 <= length_padding < 8
     assert (length_payload + length_padding + 4) % 8 == 0
-
     padding = b"\0" * length_padding
-    fd.write(padding)
-    size += len(padding)
 
+    # Calcualte CRC32 of magic, length, payload and padding
     magic_length_payload_padding = magic + length_payload_uint32le + payload + padding
-
-    # Calc and write CRC
     crc32 = binascii.crc32(magic_length_payload_padding)
     crc32_uint32le = struct.pack("<I", crc32)
-    fd.write(crc32_uint32le)
-    size += 4
 
-    return size
+    container = magic + length_payload_uint32le + payload + padding + crc32_uint32le
+
+    return container
 
 
 class AligmentError(Exception):
@@ -547,7 +531,8 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
     # Header payload is always 74 bytes long
     assert len(header_payload) == 10 + 64
 
-    writeContainer(patch_fd, __FILE_MAGIC_HEADER__, header_payload)
+    container_header = packContainer(__FILE_MAGIC_HEADER__, header_payload)
+    patch_fd.write(container_header)
 
     commands_crc32 = 0  # Initial value for CRC32
 
@@ -600,7 +585,8 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
     # Footer playload is always 64 bytes long.
     assert len(footer_payload) == 68
 
-    writeContainer(patch_fd, __FILE_MAGIC_FOOTER__, footer_payload)
+    container_footer = packContainer(__FILE_MAGIC_FOOTER__, footer_payload)
+    patch_fd.write(container_footer)
 
     return 0
 

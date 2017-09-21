@@ -112,7 +112,7 @@ def readContainer(fd, magic):
     # Read and parse length field
     length_in_file_uint32le = fd.read(4)
     bytes_read += len(length_in_file_uint32le)
-    if len(magic_in_file) != 4:
+    if len(length_in_file_uint32le) != 4:
         raise EarlyEOFReached("Cannot read four bytes for length. EOF reached!")
 
     length_payload = struct.unpack("<I", length_in_file_uint32le)[0]

@@ -437,6 +437,24 @@ class TestReadPatch(unittest.TestCase):
                 patch_fd = BytesStream(patch_corrupted)
                 self.assertRaises(DataCorruption, list, readPatch(patch_fd))
 
+    def testEarlyEOFReachedExhaustive(self):
+        # Create binary patch. Target file will be b"\0\0".
+        entry_stream = [Header(2, 0, "SHA1", b"A" * 20),
+                        ('z',),
+                        ('s',),
+                        Footer(b"B" * 20)]
+        patch_fd = BytesStreamWriter()
+        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        patch = patch_fd.getBuffer()
+
+        for i in range(len(patch)):
+            # Cut the valid patch file in <patch>
+            with self.subTest(i=i):
+                patch_too_short = patch[:i]
+
+                patch_fd = BytesStream(patch_too_short)
+                self.assertRaises(EarlyEOFReached, list, readPatch(patch_fd))
+
     def testDataCorruptionExhaustive(self):
         # Create binary patch.
         entry_stream = [Header(2, 0, "SHA1", b"A" * 20),

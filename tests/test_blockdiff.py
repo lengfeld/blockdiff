@@ -341,16 +341,9 @@ class TestReadPatch(unittest.TestCase):
                                    Footer(b"B" * 20)])
 
     def testInvalidHeaderFormat(self):
-        # Create binary Patch file
-        # Header:
-        #         Magic          Length
-        patch = b"BD\xdb\xf7" + b"\x08\x00\x00\x00"
-        #         version   some invalid payload
-        patch += b"\x01" + b"invalid"
-        #         Container Zero padding
-        patch += b"\x00\x00\x00\x00"
-        #         Container CRC32 checksum
-        patch += b'0\x90\x1d\xf1'
+        # Create binary Patch file, with correct patch file format version, but
+        # incorrect header length for patch file version '1'.
+        patch = packContainer(b"BD\xdb\xf7", b"\x01" + b"invalid")
 
         patch_fd = BytesStream(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
@@ -873,9 +866,6 @@ Target file is 0 bytes in size. Not saving anything.
 """)
 
     def testDataCorruptionInPatchfile(self):
-        dir = join(self.tmpdir, "testDataCorruptionInPatchfile")
-        os.makedirs(dir, exist_ok=True)
-
         # Create binary patch. Target file will be b"\0\0".
         entry_stream = [Header(2, 0, "SHA1", b"A" * 20),
                         ('z',),
@@ -890,8 +880,7 @@ Target file is 0 bytes in size. Not saving anything.
         patch[20] = 0xff
 
         # Execute `blockdiff` with corrupted patch file.
-        p = Popen([BLOCKDIFF, "info", "-"],
-                  stdin=PIPE, stderr=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "info", "-"], stdin=PIPE, stderr=PIPE)
         _, stderr = p.communicate(patch)
 
         # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:

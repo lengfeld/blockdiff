@@ -33,6 +33,7 @@ __VERSION__ = "0.1.y"
 
 __FILE_MAGIC_HEADER__ = b"BD\xdb\xf7"
 __FILE_MAGIC_FOOTER__ = b"BD\xdb\xf8"
+__FILE_FORMAT_VERSION__ = 1
 
 
 __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__ = 5     # See also `blockdiff.md`
@@ -527,7 +528,7 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
     checksum_type = header.getChecksumType()
     source_checksum = header.getSourceChecksum()
 
-    patch_file_version = 1
+    patch_file_version = __FILE_FORMAT_VERSION__
     checksum_type_number = __checksum_types__[checksum_type]
 
     assert 0 <= patch_file_version < 256
@@ -723,7 +724,7 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
         raise FileFormatError("Header entry does not contain patch format version information. Invalid patch file!")
 
     patch_file_version = header_payload[0]   # :: int
-    if patch_file_version != 1:
+    if patch_file_version != __FILE_FORMAT_VERSION__:
         raise UnsupportedFileVersion("Unsupported file format version '%d'. Only file version '1' is supported!" %
                                      (patch_file_version,))
 

@@ -756,8 +756,9 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     commands_crc32 = 0  # Initial value for CRC32
 
     while True:
-        # Read entries until we reached the footer structure in the file.
-        # Here we don't know a priori how many entries the target file contains.
+        # Reading commands entries until the stop command is reached. A priori
+        # the code/format does not know how many commands the patch file
+        # contains.
         command_type = myread(patch_fd, 1)
         commands_crc32 = binascii.crc32(command_type, commands_crc32)
 

@@ -943,9 +943,7 @@ class TestDiffAndPatch(TestCaseTempFolder):
         with open(join(dir, "target"), "bw") as f:
             f.write(target)
 
-        # Using 'stdout=PIPE' to surpress debug output on stdout.
-        # FIXME add argument '-s/--slient'
-        p = Popen([BLOCKDIFF, "diff", "--blocksize", "2", "source", "target", "patch"], stdout=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "diff", "-s", "--blocksize", "2", "source", "target", "patch"], cwd=dir)
         p.communicate()
         self.assertEqual(p.returncode, 0)
 

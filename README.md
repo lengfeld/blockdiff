@@ -4,11 +4,11 @@ blockdiff
 
 **blockdiff** is a binary patch tool for block base file and disk formats (like
 ext2,3,4 and btrfs). It's similar to [bsdiff] but not as general, because
-blockdiff is built on a more stricter assumption about the internal file
+`blockdiff` is built on a more stricter assumption about the internal file
 format.  The diff algorithm only considers very long byte sequences, blocks of
 around ~4 KiB, not single bytes. That's why the runtime and memory usage of
-*blockdiff* is minimal compared to *bsdiff*. Of course at the cost of not being
-as general applicable as *bsdiff*.  The main usage area of *blockdiff* should
+`blockdiff` is minimal compared to *bsdiff*. Of course at the cost of not being
+as general applicable as *bsdiff*.  The main usage area of `blockdiff` should
 be filesystem based A/B Updates of embedded devices.
 
 For the commandline interface and examples see [blockdiff's
@@ -18,7 +18,7 @@ For more information about binary patch tools see [bsdiff's homepage][bsdiff],
 the Wikipedia article [Delta Update][wikipedia-delta-update] and [Google's
 Chrome Updater Courgette][google-chrome-courgette].
 
-**NOTE:** The commandline interface and the patch file format of blockdiff is
+**NOTE:** The commandline interface and the patch file format of `blockdiff` is
 **not** considered stable yet. Wait for the *1.0.0* release :-)
 
 [bsdiff]: http://www.daemonology.net/bsdiff/
@@ -44,16 +44,16 @@ Features:
 * The target file is checked against a cryptographic checksum while it's
   written in `blockdiff patch`. When `blockdiff patch` has finished successfully
   you can be totally sure that the patch operation has produced the identical
-  file as it has existed on while doing `blockdiff diff` on the sender machine.
+  file as it has existed while doing `blockdiff diff` on the sender machine.
 * You can choose the cryptographic checksum that is stored in the patch file.
   Available options are (MD5, SHA1, SHA256 and SHA512). You can select the same
-  checksum in the patch file as you used for your cryptographic signatures. Note:
+  checksum in the patch file as you use for your cryptographic signatures. Note:
   That's only for convenience, for not security, since if you cannot trust the
   patch file, you can also not trust the cryptographic checksum in the patch
   file. The final target file must be verified another external tool.
 * Special cases, source or target file has zero length, are handled.
-* Using the wrong source file in *blockdiff patch* is handled gracefully. Every
-  source block is checked by CRC32. That catches simple human errors.
+* Using the wrong source file in `blockdiff patch` is handled gracefully. Every
+  source block is checked by CRC32. This catches simple human errors.
 
 
 Limitations (Or *Keep in mind*):
@@ -64,22 +64,27 @@ Limitations (Or *Keep in mind*):
 * Works best with disk images up to ~10GB. The limiting factor is time to read
   the source and target file.  Using `blockdiff` for 3 TB disk images is not
   feasable, because the time to read a 3TB disk images is just too long.
-* 'blockdiff' does not use compression internally.  You should *gzip* the patch
+* `blockdiff` does not use compression internally.  You should *gzip* the patch
   file yourself to reduce the transferred bytes further.
 * *In-place* patching is **not** supported.
 
 
-Homepage and Code
------------------
+Homepage, Code and Contribution
+-------------------------------
 
-The project's wobsite is:
+The project's wobsites are:
 
     https://www.stefanchrist.eu/projects/blockdiff
+    https://github.com/lengfeld/blockdiff
 
 The source code can be found in the git repositories:
 
     $ git clone https://github.com/lengfeld/blockdiff
     $ git clone https://git.stefanchrist.eu/blockdiff.git
+
+If you found a bug or want to brainstrom about additional features, open a
+issue on github. To contribute code, open a pull request on github or just send
+patches to `contact AAT stefanchrist DOOT eu`. There is no mailing list yet.
 
 
 Documentation and Install
@@ -97,14 +102,18 @@ To install the program in `$HOME/bin` execute:
 
     $ make install
 
-To install the programm and the manpage system-wide in `/usr` execute:
+To install the program and the manpage system-wide in `/usr` execute:
 
     $ make prefix=/usr install install-doc
 
 For an overview of all Makefile targets execute
 
     $ make help
-
+    all             Generate documentation
+    tests           Runs the python unit tests
+    check           Runs the pep8 source code checker
+    install         Installs program to $(prefix)/
+    help            Show the help prompt
 
 
 Usage Example
@@ -136,22 +145,23 @@ Patch File Format
 
 Goals:
 
-* Streamable. Consumer and produce don't neet to seek in the patch file.
+* Streamable. Consumer and produce don't need to seek in the patch file.
 * File format knows it's filesize and has a magic number in the header. It can
   be embedded into other byte streams.
-* Every byte is protected by CRC32 against data corruption
+* Every byte is protected by CRC32 against data corruption.
 * Values are encoded little endian, because that's the processor default on x86
   and most ARM systems.
+* First four bytes contain the magic number: b"BD\xdb\xf7" (0x42 0x44 0xdb 0xf7)
 
 Contents/entries:
 
     [header, command(type=!stop)*, command(type=stop), footer]
 
-Supported commands
+Supported commands:
 
-* 0x00: command(type=stop): End of command stream reached.
+* 0x00: command(type=stop): end of commands
 * 0x01: command(type=ones): write ones block
-* 0x02: command(type=copy): write zero block
+* 0x02: command(type=zero): write zero block
 * 0x03: command(type=copy): copy block from source file
 * 0x04: command(type=new): write new block with contents from patch file
 
@@ -166,7 +176,7 @@ testable sizes 2^16 and 2^8.
 Fix file format to support 2^64 file lengths.
 
 Add tool and built-in feature for `blockdiff patch`. Read target blocks before
-writing them. Maybe they are already wirtten by a previous interrupted patch
+writing them. Maybe they are already written by a previous interrupted patch
 operation. Minimize write operations.
 
 IDEA: Allow *in-place* patching for (system/rescue update concepts). Think
@@ -191,11 +201,17 @@ user	3m19.308s
 sys	0m1.484s
 -> corrupted patch
 
-
 Add a `--dry-run` option to `blockdiff patch`. Don't write the target file.
 Just check whether the patch file is not corrupted and all copied blocks are
 available in the source file.
 
 Add multiple source blocks in the command copy. Detect data corruption in the
 source file and fallback to another block. This should make the patch operation
-more resitents against bit errors on the storage media.
+more resilient against bit errors on the storage media.
+
+The command `blockdiff info` should be able to read "gz" files. A user
+of blockdiff is going to compress the patch files.
+
+Support interrupted patch operations. No need to download the whole patch file
+again. Just continue the download and patch operation in the middle of the
+patch file.

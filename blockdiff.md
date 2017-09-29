@@ -55,7 +55,7 @@ If the generated target file does not match the checksum stored in the patch
 file, the command returns the exit code `5` and prints an error message to
 stderr. Note: In that case the target file is still completely written to the
 given path, block device or stdout. You should not trust the target file and
-invalidate it at once. Maybe useful for further inspection.
+invalidate it at once.
 
 If the consumed patch file is corrupted, e.g. contains a bitflip, the patch
 operation is aborted. The command prints an error message on stderr and returns
@@ -96,7 +96,7 @@ length of the filessystem. It's a strip down version of the real tool
 OPTIONS
 =======
 
-Genearl options for some commands:
+General options for some commands:
 
 -s/--slient::
     Disable informational output on stdout

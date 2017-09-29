@@ -1011,7 +1011,6 @@ def printInfo(patch_fd):
             blocks_new += 1
         else:
             raise Exception("Unknown command: %s" % (command[0],))
-    # FIXME verify target_blockcount/That EOF is reached
 
     footer = next(entry_stream)
     assert isinstance(footer, Footer)

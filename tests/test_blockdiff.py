@@ -44,37 +44,37 @@ from blockdiff import (readPatch, EarlyEOFReached, readContainer,
 
 class TestReadContainer(unittest.TestCase):
     def testNoPayload(self):
-        __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x80_z\x94")
+        __MAGIC__ = b"BDIF"
+        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x8a\xd3;\x0e")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"")
         self.assertEqual(bytes_read, 16)
 
     def testNonZeroPadding(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         # Note: The zero padding bytes are checked after the CRC32 of the wohle
         # container is checked. Therfore the following container has a valid
         # CRC32, but invalid padding bytes.
-        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\xff\0" + b"\xf2\xa2^\x07")
+        fd = BytesStreamReader(__MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\xff\0" + b"\xf8.\x1f\x9d")
         self.assertRaises(NonZeroPadding, readContainer, fd, __MAGIC__)
 
     def testOneBytePayload(self):
-        __MAGIC__ = b"BD\xdb\xf7"
-        fd = BytesStreamReader(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa8\xcf\xcdi")
+        __MAGIC__ = b"BDIF"
+        fd = BytesStreamReader(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa2C\x8c\xf3")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"\x42")
         self.assertEqual(bytes_read, 16)
 
     def testZeroPadding(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         # Using 12 bytes of payload results in zero padding added.
-        fd = BytesStreamReader(__MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\xab\x92x\xec")
+        fd = BytesStreamReader(__MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\x9d\xe8\xbcm")
         payload, bytes_read = readContainer(fd, __MAGIC__)
         self.assertEqual(payload, b"123456789012")
         self.assertEqual(bytes_read, 24)
 
     def testInvalidCRC(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         # Note: The InvalidCRC execption is raised, before the zero padding is
         # checked. So hence the following container as a non-zero padding, the
         # first failure mode is the invalid CRC32.
@@ -82,7 +82,7 @@ class TestReadContainer(unittest.TestCase):
         self.assertRaises(InvalidCRC, readContainer, fd, __MAGIC__)
 
     def testInvalidMagic(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         # The InvalidMagic exceptions is raised very early. Providing a full
         # container not needed, just the first four bytes are sufficient.
         fd = BytesStreamReader(b"aabb" + b"...")
@@ -91,26 +91,26 @@ class TestReadContainer(unittest.TestCase):
 
 class TestPackContainer(unittest.TestCase):
     def testZeroLengthPayload(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         container = packContainer(__MAGIC__, b"")
         self.assertEqual(len(container), 16)
         self.assertEqual(container,
-                         __MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x80_z\x94")
+                         __MAGIC__ + b"\x00\x00\x00\x00" + b"\0\0\0\0" + b"\x8a\xd3;\x0e")
 
     def testOneBytePayload(self):
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         container = packContainer(__MAGIC__, b"\x42")
         self.assertEqual(len(container), 16)
         self.assertEqual(container,
-                         __MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa8\xcf\xcdi")
+                         __MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\0\0" + b"\xa2C\x8c\xf3")
 
     def testZeroPadding(self):
         # Using 4 + 8 = 12 bytes of payload. In that case no padding is needed.
-        __MAGIC__ = b"BD\xdb\xf7"
+        __MAGIC__ = b"BDIF"
         container = packContainer(__MAGIC__, b"123456789012")
         self.assertEqual(len(container), 24)
         self.assertEqual(container,
-                         __MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\xab\x92x\xec")
+                         __MAGIC__ + b"\x0C\x00\x00\x00" + b"123456789012" + b"\x9d\xe8\xbcm")
 
 
 class TestReadSource(TestCaseTempFolder):
@@ -197,25 +197,25 @@ class TestWritePatch(unittest.TestCase):
         # The binary format of the patch looks like
         # Header:
         #         Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch = b"BD\xdb\xf7\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + checksum padding
         patch += b"A" * 20 + b"\0" * 44
         #         Container Zero padding
         patch += b"\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x98\x9c\xa2K"
+        patch += b"\x97\xe2\xdc\xc8"
         # Entries:
         #        block-copy                                 block-write zero-write ones-write stop
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BD\xdb\xf8" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x44\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum                 Padding
         patch += b"BBBBBBBBBBBBBBBBBBBB" + b"\0" * 44
         #         Container CRC32 checksum
-        patch += b"\xbf\x9e6i"
+        patch += b"\x06>\xb16"
 
         self.assertEqual(patch_generated, patch)
 
@@ -235,25 +235,25 @@ class TestWritePatch(unittest.TestCase):
         # The binary format of the patch looks like
         # Header:
         #         Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch = b"BD\xdb\xf7\x4A\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x05"
+        patch = b"BDIF\x4A\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x05"
         #         source checksum
         patch += b"A" * 64
         #         Container Zero padding
         patch += b"\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\xa7\x87\xdf}"
+        patch += b"\xa8\xf9\xa1\xfe"
         # Entries:
         #        block-copy                                 block-write zero-write ones-write stop
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BD\xdb\xf8" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x44\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 64
         #         Container CRC32 checksum
-        patch += b"a\xceb\xeb"
+        patch += b"\xd8n\xe5\xb4"
 
         self.assertEqual(patch_generated, patch)
 
@@ -274,13 +274,13 @@ class TestReadPatch(unittest.TestCase):
         # Create binary Patch file
         # Header:
         #         Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch = b"BD\xdb\xf7\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
         #         Container Zero padding
         patch += b"\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x98\x9c\xa2K"
+        patch += b"\x97\xe2\xdc\xc8"
         # Entries:
         #         stop
         patch += b"\x00"
@@ -296,25 +296,25 @@ class TestReadPatch(unittest.TestCase):
         # Create binary patch file
         # Header:
         #         Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch = b"BD\xdb\xf7\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
         #         Container Zero padding
         patch += b"\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x98\x9c\xa2K"
+        patch += b"\x97\xe2\xdc\xc8"
         # Entries:
         #        block-copy                                 block-write zero-write ones-write stop
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BD\xdb\xf8" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x44\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 20 + b"\0" * 44
         #         Container CRC32 checksum
-        patch += b"\xbf\x9e6i"
+        patch += b"\x06>\xb16"
 
         patch_fd = BytesStreamReader(patch)
 
@@ -330,7 +330,7 @@ class TestReadPatch(unittest.TestCase):
     def testInvalidHeaderFormat(self):
         # Create binary Patch file, with correct patch file format version, but
         # incorrect header length for patch file version '1'.
-        patch = packContainer(b"BD\xdb\xf7", b"\x01" + b"invalid")
+        patch = packContainer(b"BDIF", b"\x01" + b"invalid")
 
         patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
@@ -339,25 +339,25 @@ class TestReadPatch(unittest.TestCase):
         # Create binary Patch file
         # Header:
         #         Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch = b"BD\xdb\xf7\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
         #         Container Zero padding
         patch += b"\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x98\x9c\xa2K"
+        patch += b"\x97\xe2\xdc\xc8"
         # Entries:
         #        stop
         patch += b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BD\xdb\xf8" + b"\x10\x00\x00\x00"
+        patch += b"BDIE" + b"\x10\x00\x00\x00"
         #         Some payload that triggers the error
         patch += b"not-enough-bytes"
         #         Container Zero padding
         patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b'\x05$\x86Y'
+        patch += b"V\xedu\x83"
 
         patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
@@ -365,13 +365,13 @@ class TestReadPatch(unittest.TestCase):
     def testEarlyEOFReached(self):
         # Header:
         #               Magic+length                   version   blocksize         source-blockcount   checksum-type
-        patch_header = b"BD\xdb\xf7\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        patch_header = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #               source checksum + padding
         patch_header += b"A" * 20 + b"\0" * 44
         #               Container Zero padding
         patch_header += b"\x00\x00"
         #               Container CRC32 checksum
-        patch_header += b"\x98\x9c\xa2K"
+        patch_header += b"\x97\xe2\xdc\xc8"
 
         # Test early EOF in copy entry
         patch = patch_header
@@ -459,20 +459,20 @@ class TestReadPatch(unittest.TestCase):
         self.assertRaises(DataCorruption, list, readPatch(patch_fd, error_on_no_eof=True))
 
     def testUnsupportedPatchFileVersion(self):
-        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # Create binary patch file that has the blockdiff magic b"BDIF"
         # but has a different internal version number. The length field does
         # not matter as long it's not zero.
-        patch = packContainer(b"BD\xdb\xf7", b"\x02xxxx")
+        patch = packContainer(b"BDIF", b"\x02xxxx")
 
         patch_fd = BytesStreamReader(patch)
         self.assertRaises(UnsupportedFileVersion, list, readPatch(patch_fd))
 
     def testHeaderEntryOfZeroLength(self):
-        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # Create binary patch file that has the blockdiff magic b"BDIF"
         # but a header entry of zero length. That's a special case, because
         # the patch file format needs a least a single byte of payload in the header
         # entry containing the version number.
-        patch = packContainer(b"BD\xdb\xf7", b"")
+        patch = packContainer(b"BDIF", b"")
 
         patch_fd = BytesStreamReader(patch)
         self.assertRaises(FileFormatError, list, readPatch(patch_fd))
@@ -669,7 +669,7 @@ class TestPatch(TestCaseTempFolder):
         # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
-                         b"ERROR: Invalid CRC32 in header: Expected CRC32 4271503841 (bytes b'\\xe1\\xf9\\x99\\xfe'). Computed CRC32 2580729403 (bytes b';\\xce\\xd2\\x99')!\n")
+                         b"ERROR: Invalid CRC32 in header: Expected CRC32 2112325614 (bytes b'\\xee\\x87\\xe7}'). Computed CRC32 447524916 (bytes b'4\\xb0\\xac\\x1a')!\n")
 
     def testSourceBlockHasInvalidCRC32(self):
         dir = join(self.tmpdir, "testSourceBlockHasInvalidCRC32")
@@ -706,10 +706,10 @@ class TestPatch(TestCaseTempFolder):
         dir = join(self.tmpdir, "testNewerPatchFileFormat")
         os.makedirs(dir, exist_ok=True)
 
-        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # Create binary patch file that has the blockdiff magic b"BDIF"
         # but has a different internal version number. The length field does
         # not matter as long it's not zero.
-        patch = packContainer(b"BD\xdb\xf7", b"\x03xxxx")
+        patch = packContainer(b"BDIF", b"\x03xxxx")
 
         with open(join(dir, "source"), "bw") as f:
             f.write(b"")
@@ -891,7 +891,7 @@ Target file is 0 bytes in size. Not saving anything.
         # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
-                         b"ERROR: Invalid CRC32 in header: Expected CRC32 4271503841 (bytes b'\\xe1\\xf9\\x99\\xfe'). Computed CRC32 2580729403 (bytes b';\\xce\\xd2\\x99')!\n")
+                         b"ERROR: Invalid CRC32 in header: Expected CRC32 2112325614 (bytes b'\\xee\\x87\\xe7}'). Computed CRC32 447524916 (bytes b'4\\xb0\\xac\\x1a')!\n")
 
     def testNoEOFAtEndOfPatchFile(self):
         # Create binary patch. Target file will be b"\0\0".
@@ -916,10 +916,10 @@ Target file is 0 bytes in size. Not saving anything.
                          b"ERROR: No EOF after footer entry. Additional bytes at end of patch file!\n")
 
     def testNewerPatchFileFormat(self):
-        # Create binary patch file that has the blockdiff magic b"BD\xdb\xf7"
+        # Create binary patch file that has the blockdiff magic b"BDIF"
         # but has a different internal version number. The length field does
         # not matter as long it's not zero.
-        patch = packContainer(b"BD\xdb\xf7", b"\x03xxxx")
+        patch = packContainer(b"BDIF", b"\x03xxxx")
 
         # Execute `blockdiff` with corrupted patch file.
         p = Popen([BLOCKDIFF, "info", "-"], stdin=PIPE, stderr=PIPE)

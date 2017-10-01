@@ -151,7 +151,7 @@ Goals:
 * Every byte is protected by CRC32 against data corruption.
 * Values are encoded little endian, because that's the processor default on x86
   and most ARM systems.
-* First four bytes contain the magic number: b"BD\xdb\xf7" (0x42 0x44 0xdb 0xf7)
+* First four bytes contain the magic number: b"BDIF" (0x42 0x44 0x49 0x46)
 
 Contents/entries:
 

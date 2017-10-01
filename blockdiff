@@ -31,8 +31,8 @@ from collections import namedtuple
 __VERSION__ = "0.1.y"
 
 
-__FILE_MAGIC_HEADER__ = b"BD\xdb\xf7"
-__FILE_MAGIC_FOOTER__ = b"BD\xdb\xf8"
+__FILE_MAGIC_HEADER__ = b"BDIF"
+__FILE_MAGIC_FOOTER__ = b"BDIE"
 __FILE_FORMAT_VERSION__ = 1
 
 

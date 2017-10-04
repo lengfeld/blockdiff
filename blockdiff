@@ -677,9 +677,9 @@ class UnsupportedFileVersion(Exception):
 
 
 def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
-    """Returns a command stream generator
+    """Returns an entry stream generator
 
-    Raises exception
+    Raises exceptions:
         - InvalidMagic when file <patch_fd> is not a patch file
         - DataCorruption when the patch file is corrupted
         - DataCorruption when <error_on_no_eof> is true and file/stream in
@@ -904,6 +904,14 @@ def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
     footer = next(entry_stream)
     assert isinstance(footer, Footer)
 
+    # Verify that Footer structure is really the last element in the entry
+    # stream generator.
+    try:
+        next(entry_stream)
+        raise ValueError("Entry stream generator does not end after footer entry!")
+    except StopIteration:
+        pass
+
     # Get checksum of target file
     target_checksum = target_checksum_m.digest()
 
@@ -1015,6 +1023,14 @@ def printInfo(patch_fd):
     footer = next(entry_stream)
     assert isinstance(footer, Footer)
     target_checksum = footer.getTargetChecksum()
+
+    # Verify that Footer structure is really the last element in the entry
+    # stream generator.
+    try:
+        next(entry_stream)
+        raise ValueError("Entry stream generator does not end after footer entry!")
+    except StopIteration:
+        pass
 
     # FIXME The readPatch() generator should return the current
     # file position/already read bytes another way! Using the mutbale list

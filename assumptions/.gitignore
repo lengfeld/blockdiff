@@ -1,5 +1,7 @@
 /files/
 /image.btrfs
 /image.ext4
-/report.btrfs
-/report.ext4
+/files.tar
+/report.btrfs.txt
+/report.ext4.txt
+/report.tar.txt

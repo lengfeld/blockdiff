@@ -31,7 +31,8 @@ def main():
         return 1
 
     blocksize = int(sys.argv[1])
-    assert blocksize in (1024, 2048, 4096)
+    # Allow '512' for tar file format
+    assert blocksize in (512, 1024, 2048, 4096)
     dirname = sys.argv[2]
     image = sys.argv[3]
 

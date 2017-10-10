@@ -19,9 +19,9 @@
 # Use bash for 'set -o pipefail'
 SHELL = bash
 
-TARGETS = files image.ext4 image.btrfs report.ext4 report.btrfs
+TARGETS = files image.ext4 image.btrfs report.ext4.txt report.btrfs.txt files.tar report.tar.txt
 
-# Filesytem blocksize. Valid values are 1024, 2048 or 4096.
+# Filesystem blocksize. Valid values for ext4 and btrfs are 1024, 2048 or 4096.
 BLOCKSIZE = 2048
 
 
@@ -50,16 +50,23 @@ image.btrfs: files
 	sudo umount mnt-btrfs
 	rmdir mnt-btrfs
 
+files.tar: files
+	tar -c -f $@ $<
 
-report.ext4: files image.ext4
+report.ext4.txt: files image.ext4
 	set -o pipefail ; ./find-blocks.py $(BLOCKSIZE) $^ | tee $@
 
 
 # NOTE: btrfs stores files up to 2048 bytes in the directory tree, not in
 # separate blocks. For files smaller or equal to 2048 the assumption does not
 # hold.
-report.btrfs: files image.btrfs
+report.btrfs.txt: files image.btrfs
 	set -o pipefail ; ./find-blocks.py $(BLOCKSIZE) $^ | tee $@
+
+
+# tar uses always a blocksize of 512 bytes.
+report.tar.txt: files files.tar
+	set -o pipefail ; ./find-blocks.py 512 $^ | tee $@
 
 
 .PHONY: clean

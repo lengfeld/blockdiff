@@ -11,7 +11,7 @@ blockdiff - block based binary patch tool
 SYNOPSIS
 ========
 
-    blockdiff diff [--blocksize=<uint>] [--checksum-type=<name>] [-s/--silent] <source> <target> <patch>
+    blockdiff diff [-b/--blocksize=<uint>] [-c/--checksum-type=<name>] [-s/--silent] <source> <target> <patch>
     blockdiff patch [-s/--silent] <source> <patch> <target>
     blockdiff info <target>
     blockdiff extinfo <filepath>

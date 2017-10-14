@@ -1235,10 +1235,10 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
                              help="Filepath for target file or '-' to read from stdin.")
     parser_diff.add_argument(dest="patch", type=str,
                              help="File to write the patch or '-' to write to stdout. Existing files will be overwritten.")
-    parser_diff.add_argument("--blocksize", dest="blocksize", type=int,
+    parser_diff.add_argument("-b", "--blocksize", dest="blocksize", type=int,
                              default=4 * 1024,
                              help="Blocksize in bytes (default: 4096 B = 4 KiB)")
-    parser_diff.add_argument("--checksum-type", dest="checksum_type", type=str,
+    parser_diff.add_argument("-c", "--checksum-type", dest="checksum_type", type=str,
                              default="SHA1",
                              help="Checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
     parser_diff.add_argument("-s", "--slient", dest="silent", action='store_true',

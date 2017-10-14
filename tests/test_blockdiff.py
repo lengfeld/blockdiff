@@ -1114,7 +1114,8 @@ class TestDiff(TestCaseTempFolder):
 
         target = b"aabb"
 
-        p = Popen([BLOCKDIFF, "diff", "--blocksize=2", "--checksum-type=SHA512", "source", "-", "-"],
+        # Check also short options '-b' and '-c' here.
+        p = Popen([BLOCKDIFF, "diff", "-b", "2", "-c", "SHA512", "source", "-", "-"],
                   stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(target)
         self.assertEqual(p.returncode, 0)

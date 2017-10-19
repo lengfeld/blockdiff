@@ -491,7 +491,7 @@ class TestPatch(TestCaseTempFolder):
         # number.
         patch = b"\0\0\0\0"
 
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "-", "target"], stdin=PIPE, stderr=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "target"], stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
         self.assertEqual(p.returncode, 1)
         self.assertIn(b"ERROR: File `-` is not a valid patch file:", stderr)
@@ -521,7 +521,7 @@ class TestPatch(TestCaseTempFolder):
         with open(join(dir, "patch"), "bw") as f:
             f.write(patch)
 
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "patch", "target"], cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "patch", "target"], cwd=dir)
         p.communicate()
         self.assertEqual(p.returncode, 0)
 
@@ -553,7 +553,7 @@ class TestPatch(TestCaseTempFolder):
         with open(join(dir, "patch"), "bw") as f:
             f.write(patch)
 
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "patch", "target"], cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "patch", "target"], cwd=dir)
         p.communicate()
         self.assertEqual(p.returncode, 0)
 
@@ -580,7 +580,7 @@ class TestPatch(TestCaseTempFolder):
         writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
         patch = patch_fd.getBuffer()
 
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
         self.assertEqual(stdout, target)
@@ -608,7 +608,7 @@ class TestPatch(TestCaseTempFolder):
         target_filepath = join(dir, "target")
         self.assertFalse(os.path.exists(target_filepath))
 
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "-", "target"], stdin=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "target"], stdin=PIPE, cwd=dir)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
         with open(target_filepath, "br") as f:
@@ -943,7 +943,7 @@ class TestDiffAndPatch(TestCaseTempFolder):
         with open(join(dir, "target"), "bw") as f:
             f.write(target)
 
-        p = Popen([BLOCKDIFF, "diff", "-s", "--blocksize", "2", "source", "target", "patch"], cwd=dir)
+        p = Popen([BLOCKDIFF, "diff", "-q", "--blocksize", "2", "source", "target", "patch"], cwd=dir)
         p.communicate()
         self.assertEqual(p.returncode, 0)
 
@@ -965,7 +965,7 @@ class TestDiffAndPatch(TestCaseTempFolder):
             self.assertEqual(f.read(), patch)
 
         # Apply patch to file
-        p = Popen([BLOCKDIFF, "patch", "-s", "source", "patch", "target.2"], cwd=dir)
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "patch", "target.2"], cwd=dir)
         p.communicate()
         self.assertEqual(p.returncode, 0)
 

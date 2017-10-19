@@ -11,8 +11,8 @@ blockdiff - block based binary patch tool
 SYNOPSIS
 ========
 
-    blockdiff diff [-b/--blocksize=<uint>] [-c/--checksum-type=<name>] [-s/--silent] <source> <target> <patch>
-    blockdiff patch [-s/--silent] <source> <patch> <target>
+    blockdiff diff [-b/--blocksize=<uint>] [-c/--checksum-type=<name>] [-q/--quiet] <source> <target> <patch>
+    blockdiff patch [-q/--quiet] <source> <patch> <target>
     blockdiff info <target>
     blockdiff extinfo <filepath>
 
@@ -103,7 +103,7 @@ OPTIONS
 
 General options for some commands:
 
--s/--slient::
+-q/--quiet::
     Disable informational output on stdout
 
 

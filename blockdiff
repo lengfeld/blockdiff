@@ -597,7 +597,7 @@ def diff(args, parser):
     patch = args.patch  # FIXME rename, because it has the same name as the function
     blocksize = args.blocksize
     checksum_type = args.checksum_type
-    silent = args.silent
+    quiet = args.quiet
 
     # Sanitize checksum_type value from user
     checksum_type = checksum_type.upper()
@@ -607,7 +607,7 @@ def diff(args, parser):
               file=sys.stderr)
         return 64   # EX_USAGE. See /usr/include/sysexits.h
 
-    if silent:
+    if quiet:
         stdoutAllowed = False
     else:
         # If patch is written to stdout the functions readSource and
@@ -937,9 +937,9 @@ def patch(args, parser):
     source = args.source
     patch = args.patch  # FIXME rename, because it has the same name as the function
     target = args.target
-    silent = args.silent
+    quiet = args.quiet
 
-    if silent:
+    if quiet:
         stdoutAllowed = False
     else:
         if patch != '-':
@@ -1241,7 +1241,7 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
     parser_diff.add_argument("-c", "--checksum-type", dest="checksum_type", type=str,
                              default="SHA1",
                              help="checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
-    parser_diff.add_argument("-s", "--slient", dest="silent", action='store_true',
+    parser_diff.add_argument("-q", "--quiet", dest="quiet", action='store_true',
                              default=False,
                              help="don't print verbose output on stdout")
 
@@ -1253,7 +1253,7 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
                               help="path to patch or '-' to read from stdin.")
     parser_patch.add_argument(dest="target", type=str,
                               help="file to write the output or '-' to write to stdout. Existing files will be overwritten.")
-    parser_patch.add_argument("-s", "--slient", dest="silent", action='store_true',
+    parser_patch.add_argument("-q", "--quiet", dest="quiet", action='store_true',
                               default=False,
                               help="don't print verbose output on stdout")
 

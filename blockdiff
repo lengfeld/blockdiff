@@ -688,23 +688,16 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
           not equal to '1'. Other and newer formats are not supported.
     """
 
-    def myread(fd, size):
-        buf = fd.read(size)
-        if len(filesize_hacky_list) >= 1:
-            filesize_hacky_list[0] += len(buf)
-        return buf
+    # Accumulate every bytes that this function reads from <patch_fd>.
+    patch_bytes_read = 0
 
     # Function readContainer() raises InvalidMagic when the magic numbers was
     # not found.
     try:
         header_payload, bytes_read = readContainer(patch_fd, __FILE_MAGIC_HEADER__)
+        patch_bytes_read += bytes_read
     except InvalidCRC as e:
         raise DataCorruption("Invalid CRC32 in header: %s" % (e,))
-
-    # HACK HACKY: increase filesize counter, because readContainer does not do
-    # it.
-    if len(filesize_hacky_list) >= 1:
-        filesize_hacky_list[0] += bytes_read
 
     if not len(header_payload) >= 1:
         raise FileFormatError("Header entry does not contain patch format version information. Invalid patch file!")
@@ -753,7 +746,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
         # Reading commands entries until the stop command is reached. A priori
         # the code/format does not know how many commands the patch file
         # contains.
-        command_type = myread(patch_fd, 1)
+        command_type = patch_fd.read(1)
+        patch_bytes_read += len(command_type)
         commands_crc32 = binascii.crc32(command_type, commands_crc32)
 
         if len(command_type) == 0:
@@ -768,7 +762,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
             yield ('o',)  # write ones block
         elif command_type == b"\x03":
             # Copy block
-            source_block_encoded = myread(patch_fd, 8)
+            source_block_encoded = patch_fd.read(8)
+            patch_bytes_read += len(source_block_encoded)
             commands_crc32 = binascii.crc32(source_block_encoded, commands_crc32)
 
             if len(source_block_encoded) != 8:
@@ -784,7 +779,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
             yield ('c', source_block_crc32, source_block_index)
         elif command_type == b"\x04":
             # New block
-            block = myread(patch_fd, blocksize)
+            block = patch_fd.read(blocksize)
+            patch_bytes_read += len(block)
             commands_crc32 = binascii.crc32(block, commands_crc32)
             if len(block) != blocksize:
                 raise EarlyEOFReached("Cannot block data in command(type=write).")
@@ -800,6 +796,7 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     # Read footer structure
     try:
         footer_payload, bytes_read = readContainer(patch_fd, __FILE_MAGIC_FOOTER__)
+        patch_bytes_read += bytes_read
     except InvalidMagic:
         # Do not raise InvalidMagic magic for the footer structure. The
         # function should only raises InvalidMagic for the header structure. A invalid
@@ -808,11 +805,6 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
         raise DataCorruption("Invalid magic number in footer. Corrupted file?")
     except InvalidCRC as e:
         raise DataCorruption("Invalid CRC32 in footer: %s" % (e,))
-
-    # HACK HACKY: increase filesize counter, because readContainer does not do
-    # it.
-    if len(filesize_hacky_list) >= 1:
-        filesize_hacky_list[0] += bytes_read
 
     if len(footer_payload) != 68:
         raise FileFormatError("Footer payload must be 68 bytes long")
@@ -841,6 +833,13 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
         after_footer = patch_fd.read(1)
         if len(after_footer) != 0:
             raise DataCorruption("No EOF after footer entry. Additional bytes at end of patch file!")
+
+    # HACK HACKY: Using mutable list object for by-reference semantices to
+    # return additional information after the generator has finished.
+    if len(filesize_hacky_list) >= 1:
+        # At the end of the function the count of bytes, which are read,
+        # correspond to the patch file.
+        filesize_hacky_list[0] = patch_bytes_read
 
     yield Footer(target_checksum)
 

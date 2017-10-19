@@ -13,7 +13,7 @@ SYNOPSIS
 
     blockdiff diff [-b/--blocksize=<uint>] [-c/--checksum-type=<name>] [-q/--quiet] <source> <target> <patch>
     blockdiff patch [-q/--quiet] <source> <patch> <target>
-    blockdiff info <target>
+    blockdiff info [--fast] <patch>
     blockdiff extinfo <filepath>
 
 
@@ -81,6 +81,12 @@ Additional bytes at the end of the patch file are tolerated. No EOF needed.
 
 Argument 'patch' is the patch to read the patch file or '-' to read the patch
 directly from stdin.
+
+Pass the argument '--fast' to only read and print the information from the
+header and footer structure in the patch file. This speeds up the execution
+time considerably, because not the whole file must be traversed. Note: Not all
+information can be printed and the 'patch' argument must be seekable, e.g.
+reading from stdin fails.
 
 If the consumed patch file is corrupted, e.g. contains a bitflip, the command
 aborts, prints an error message on stderr and returns the exit code `6`.

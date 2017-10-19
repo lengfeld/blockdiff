@@ -41,9 +41,10 @@ class TestCaseTempFolder(unittest.TestCase):
 # Providing function read() and seek() to emulate a file object for the unit
 # tests.
 class BytesStreamReader():
-    def __init__(self, b):
+    def __init__(self, b, allow_seek=True):
         self._b = b
         self._pos = 0
+        self._allow_seek = allow_seek
 
     def read(self, size):
         """ If all bytes are read the function returns b''."""
@@ -51,8 +52,23 @@ class BytesStreamReader():
         self._pos += size
         return tmp
 
-    def seek(self, pos):
-        self._pos = pos
+    def seek(self, pos, whence=0):
+        if not self._allow_seek:
+            raise ValueError("tbd")
+
+        if whence == 0:
+            self._pos = pos
+        elif whence == 1:
+            self._pos += pos
+        elif whence == 2:
+            self._pos = len(self._b) + pos
+        else:
+            raise ValueError("Value %d is invalid!" % (whence,))
+
+        return self._pos
+
+    def seekable(self):
+        return self._allow_seek
 
 
 class BytesStreamWriter():

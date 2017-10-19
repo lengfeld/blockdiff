@@ -39,7 +39,7 @@ from blockdiff import (readPatch, EarlyEOFReached, readContainer,
                        packContainer, readTargetAndGenPatchCommands, Header,
                        Footer, __FILE_MAGIC_FOOTER__, writePatch,
                        FileFormatError, parseExtSuperblock, DataCorruption,
-                       readSource, UnsupportedFileVersion)
+                       readSource, UnsupportedFileVersion, NotSeekable)
 
 
 class TestReadContainer(unittest.TestCase):
@@ -291,6 +291,69 @@ class TestReadPatch(unittest.TestCase):
 
         patch_fd = BytesStreamReader(patch)
         self.assertRaises(DataCorruption, list, readPatch(patch_fd))
+
+    def testSkipCommandEntries(self):
+        # Create binary patch file
+        # Header:
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        #         source checksum + padding
+        patch += b"A" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00"
+        #         Container CRC32 checksum
+        patch += b"\x97\xe2\xdc\xc8"
+        # Entries:
+        #        block-copy                                 block-write zero-write ones-write stop
+        patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
+        # Footer:
+        #         Magic           Length
+        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        #         Commands CRC32 checksum
+        patch += b"\xac\xb6\x12\xdd"
+        #         Checksum
+        patch += b"B" * 20 + b"\0" * 44
+        #         Container CRC32 checksum
+        patch += b"\x06>\xb16"
+
+        patch_fd = BytesStreamReader(patch)
+
+        filesize_hacky_list = [0]
+        entries = list(readPatch(patch_fd,
+                                 filesize_hacky_list=filesize_hacky_list,
+                                 skip_command_entries=True))
+        self.assertEqual(entries, [Header(2, 3, "SHA1", b"A" * 20),
+                                   Footer(b"B" * 20)])
+        self.assertEqual(filesize_hacky_list[0], len(patch))
+
+    def testSkipCommandEntriesWithExceptionOnNotSeekable(self):
+        # Create binary patch file
+        # Header:
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        #         source checksum + padding
+        patch += b"A" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00"
+        #         Container CRC32 checksum
+        patch += b"\x97\xe2\xdc\xc8"
+        # Entries:
+        #        block-copy                                 block-write zero-write ones-write stop
+        patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
+        # Footer:
+        #         Magic           Length
+        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        #         Commands CRC32 checksum
+        patch += b"\xac\xb6\x12\xdd"
+        #         Checksum
+        patch += b"B" * 20 + b"\0" * 44
+        #         Container CRC32 checksum
+        patch += b"\x06>\xb16"
+
+        # Disallow seek in the BytesStreamReader object to force exception.
+        patch_fd = BytesStreamReader(patch, allow_seek=False)
+
+        self.assertRaises(NotSeekable, list, readPatch(patch_fd, skip_command_entries=True))
 
     def testNormal(self):
         # Create binary patch file
@@ -769,6 +832,42 @@ target-filesize          8 B (    0.0 MiB)
 Saving -175 B (-2187.50 %) compared to sending the target file.
 """)
 
+    def testFast(self):
+        dir = join(self.tmpdir, "testFast")
+        os.makedirs(dir, exist_ok=True)
+
+        # Create binary patch file
+        entry_stream = [Header(2, 3, "SHA1", b"\0" * 20),
+                        ('z',),
+                        ('o',),
+                        ('z',),
+                        ('o',),
+                        ('s',),
+                        Footer(b"\0" * 20)]
+        patch_fd = BytesStreamWriter()
+        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        patch = patch_fd.getBuffer()
+
+        # Create patch file on filesystem. For "--fast" patch file must be
+        # seekable.
+        patch_filepath = join(dir, "patch")
+        with open(patch_filepath, "bw") as f:
+            f.write(patch)
+
+        # Feed patch file into `blockdiff info`
+        p = Popen([BLOCKDIFF, "info", "--fast", "patch"], stdout=PIPE, stdin=PIPE, cwd=dir)
+        stdout, _ = p.communicate(patch)
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(stdout,
+b"""blocksize 2 B
+source-blocks      3
+checksum-type SHA1
+source-checksum 0000000000000000000000000000000000000000
+target-checksum 0000000000000000000000000000000000000000
+source-filesize          6 B (    0.0 MiB)
+patch-filesize         173 B (    0.0 MiB)
+""")
+
     def testSHA512(self):
         # Create binary patch file
         entry_stream = [Header(2, 3, "SHA512", b"\x01" * 64),
@@ -914,6 +1013,25 @@ Target file is 0 bytes in size. Not saving anything.
         self.assertEqual(p.returncode, 6)
         self.assertEqual(stderr,
                          b"ERROR: No EOF after footer entry. Additional bytes at end of patch file!\n")
+
+    def testOptionFastAndPatchIsNotSeekable(self):
+        # Create binary patch. Target file will be b"\0\0".
+        entry_stream = [Header(2, 0, "SHA1", b"A" * 20),
+                        ('z',),
+                        ('s',),
+                        Footer(b"B" * 20)]
+        patch_fd = BytesStreamWriter()
+        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        patch = patch_fd.getBuffer()
+
+        # Execute `blockdiff` and pass patch via stdin pipe. This makes it not
+        # seekable.
+        p = Popen([BLOCKDIFF, "info", "--fast", "-"], stdin=PIPE, stderr=PIPE)
+        _, stderr = p.communicate(patch)
+
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(stderr,
+                         b"ERROR: Option '--fast' requires the patch argument to be seekable, e.g. a file!\n")
 
     def testNewerPatchFileFormat(self):
         # Create binary patch file that has the blockdiff magic b"BDIF"

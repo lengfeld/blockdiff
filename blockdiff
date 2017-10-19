@@ -672,12 +672,27 @@ class DataCorruption(Exception):
     pass
 
 
+class NotSeekable(Exception):
+    pass
+
+
 class UnsupportedFileVersion(Exception):
     pass
 
 
-def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
-    """Returns an entry stream generator
+def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_command_entries=False):
+    """Returns an entry generator. The argument <patch_fd> can be a file or stream.
+
+    If flag <skip_command_entries> is false, which is the default, the generator
+    returns the entries:
+
+        [header, command(type=!stop)*, command(type=stop), footer]
+
+    If flag <skip_command_entries> is true, the function skips the command
+    entries and only returns the header and footer. The <patch_fd> must be
+    seekable in that case. The entries in the generator look like
+
+        [header, footer]
 
     Raises exceptions:
         - InvalidMagic when file <patch_fd> is not a patch file
@@ -686,6 +701,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
           <patch_fd> contains bytes after the footer entry.
         - UnsupportedFileVersion if the patch file format in <patch_fd> is
           not equal to '1'. Other and newer formats are not supported.
+        - NotSeekable when skip_command_entries is true, but the file
+          descriptor in <patch_fd> is not seekable.
     """
 
     # Accumulate every bytes that this function reads from <patch_fd>.
@@ -740,58 +757,83 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
 
     yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
 
-    commands_crc32 = 0  # Initial value for CRC32
+    if skip_command_entries is False:
+        commands_crc32 = 0  # Initial value for CRC32
+        while True:
+            # Reading commands entries until the stop command is reached. A priori
+            # the code/format does not know how many commands the patch file
+            # contains.
+            command_type = patch_fd.read(1)
+            patch_bytes_read += len(command_type)
+            commands_crc32 = binascii.crc32(command_type, commands_crc32)
 
-    while True:
-        # Reading commands entries until the stop command is reached. A priori
-        # the code/format does not know how many commands the patch file
-        # contains.
-        command_type = patch_fd.read(1)
-        patch_bytes_read += len(command_type)
-        commands_crc32 = binascii.crc32(command_type, commands_crc32)
+            if len(command_type) == 0:
+                raise EarlyEOFReached("Cannot read next command. No stop command found.")
 
-        if len(command_type) == 0:
-            raise EarlyEOFReached("Cannot read next command. No stop command found.")
+            if command_type == b"\x00":
+                yield ('s',)  # emit command(type=stop)
+                break  # Stop reading command entries
+            elif command_type == b"\x02":
+                yield ('z',)  # write zero block
+            elif command_type == b"\x01":
+                yield ('o',)  # write ones block
+            elif command_type == b"\x03":
+                # Copy block
+                source_block_encoded = patch_fd.read(8)
+                patch_bytes_read += len(source_block_encoded)
+                commands_crc32 = binascii.crc32(source_block_encoded, commands_crc32)
 
-        if command_type == b"\x00":
-            yield ('s',)  # emit command(type=stop)
-            break  # Stop reading command entries
-        elif command_type == b"\x02":
-            yield ('z',)  # write zero block
-        elif command_type == b"\x01":
-            yield ('o',)  # write ones block
-        elif command_type == b"\x03":
-            # Copy block
-            source_block_encoded = patch_fd.read(8)
-            patch_bytes_read += len(source_block_encoded)
-            commands_crc32 = binascii.crc32(source_block_encoded, commands_crc32)
+                if len(source_block_encoded) != 8:
+                    raise EarlyEOFReached("Cannot read source block information in command(type=copy).")
 
-            if len(source_block_encoded) != 8:
-                raise EarlyEOFReached("Cannot read source block information in command(type=copy).")
+                source_block_crc32, source_block_index = struct.unpack("<II",
+                                                                       source_block_encoded)
 
-            source_block_crc32, source_block_index = struct.unpack("<II",
-                                                                   source_block_encoded)
+                if not 0 <= source_block_index < source_blockcount:
+                    raise DataCorruption("Source block index %d in command(type=copy) corrupted. Source file has only %d block(s)!" %
+                                         (source_block_index, source_blockcount))
 
-            if not 0 <= source_block_index < source_blockcount:
-                raise DataCorruption("Source block index %d in command(type=copy) corrupted. Source file has only %d block(s)!" %
-                                     (source_block_index, source_blockcount))
+                yield ('c', source_block_crc32, source_block_index)
+            elif command_type == b"\x04":
+                # New block
+                block = patch_fd.read(blocksize)
+                patch_bytes_read += len(block)
+                commands_crc32 = binascii.crc32(block, commands_crc32)
+                if len(block) != blocksize:
+                    raise EarlyEOFReached("Cannot block data in command(type=write).")
 
-            yield ('c', source_block_crc32, source_block_index)
-        elif command_type == b"\x04":
-            # New block
-            block = patch_fd.read(blocksize)
-            patch_bytes_read += len(block)
-            commands_crc32 = binascii.crc32(block, commands_crc32)
-            if len(block) != blocksize:
-                raise EarlyEOFReached("Cannot block data in command(type=write).")
+                yield ('w', block)
+            else:
+                # An unknown command type is also some sort of data corruption.
+                # Maybe caused by a single bitflip in the patch file.
+                # Nevertheless an invalid command type byte is detected by the
+                # command CRC32 checksum stored in the footer structure, too.
+                raise DataCorruption("Unkown command type: %s" % (command_type,))
+    else:
+        # Skip command entries in the patch file format after reading the
+        # header structure. File in <patch_fd> must be seekable. Otherwise it's
+        # impossible to know at which location the footer structure is located
+        # in the patch file format, because the command entries are of variable
+        # byte lengths.
+        #
+        # This code uses the external information source, the file's length, to
+        # avoid traverse the command entries in the patch file.
 
-            yield ('w', block)
+        # NOTE: Violating the 'It's better to ask for forgiveness than for
+        # permission'-Rule here.
+        if patch_fd.seekable():
+            # 12 bytes of container metadata, 68 bytes of footer structure payload.
+            pos = patch_fd.seek(-(12 + 68), 2)
         else:
-            # An unknown command type is also some sort of data corruption.
-            # Maybe caused by a single bitflip in the patch file. Nevertheless
-            # a invalid command type byte is goint to be also detected by the
-            # command CRC32 checksum stored in the footer structure.
-            raise DataCorruption("Unkown command type: %s" % (command_type,))
+            raise NotSeekable("The patch file is not seekable!")
+
+        # Adapt the counter <bytes_read>. For files it's equal to the absolute
+        # file position. Since we skip reading bytes here, advance the
+        # bytes_read counter virtually, so the patch file size calculation does
+        # not become out of sync. It must return the same value as in the
+        # <skip_command_entries> is false case.
+        assert pos > bytes_read
+        patch_bytes_read = pos
 
     # Read footer structure
     try:
@@ -818,14 +860,16 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False):
     if not all(i == 0 for i in target_checksum_padding):
         raise FileFormatError("Target checkums padding is not zero: %s!" % (target_checksum_padding,))
 
-    commands_crc32_in_file = struct.unpack("<I", commands_crc32_in_file_uint32le)[0]
+    if not skip_command_entries:
+        # Can only check CRC32 of command entries, when we have read them.
+        commands_crc32_in_file = struct.unpack("<I", commands_crc32_in_file_uint32le)[0]
 
-    if commands_crc32_in_file != commands_crc32:
-        raise DataCorruption("Corrupted bytes in the command stream. Computed CRC32 is %d (bytes %s). Expected CRC32 is %d (bytes %s)!" %
-                             (commands_crc32,
-                              struct.pack("<I", commands_crc32),
-                              commands_crc32_in_file,
-                              struct.pack("<I", commands_crc32_in_file)))
+        if commands_crc32_in_file != commands_crc32:
+            raise DataCorruption("Corrupted bytes in the command stream. Computed CRC32 is %d (bytes %s). Expected CRC32 is %d (bytes %s)!" %
+                                 (commands_crc32,
+                                  struct.pack("<I", commands_crc32),
+                                  commands_crc32_in_file,
+                                  struct.pack("<I", commands_crc32_in_file)))
 
     # Must be before the last yield statement. Otherwise consumer never reaches
     # the code.
@@ -984,10 +1028,13 @@ def patch(args, parser):
     return ret
 
 
-def printInfo(patch_fd):
+def printInfo(patch_fd, skip_command_entries=False):
     # Phase I): Reading the patch file
     filesize_hacky_list = [0]
-    entry_stream = readPatch(patch_fd, filesize_hacky_list=filesize_hacky_list, error_on_no_eof=True)
+    entry_stream = readPatch(patch_fd,
+                             filesize_hacky_list=filesize_hacky_list,
+                             error_on_no_eof=True,
+                             skip_command_entries=skip_command_entries)
 
     header = next(entry_stream)
     assert isinstance(header, Header)
@@ -996,28 +1043,30 @@ def printInfo(patch_fd):
     checksum_type = header.getChecksumType()
     source_checksum = header.getSourceChecksum()
 
-    blocks_zero = 0
-    blocks_ones = 0
-    blocks_copy = 0
-    blocks_new = 0
-    target_blockcount = 0
-    for command in entry_stream:
-        if command[0] == 's':
-            # Exit loop and do not count as a target_block. End of commands
-            # reached.
-            break  # Command(type=stop)
+    if not skip_command_entries:
+        blocks_zero = 0
+        blocks_ones = 0
+        blocks_copy = 0
+        blocks_new = 0
+        target_blockcount = 0
+        for command in entry_stream:
+            assert isinstance(command, tuple)
+            if command[0] == 's':
+                # Exit loop and do not count as a target_block. End of commands
+                # reached.
+                break  # Command(type=stop)
 
-        target_blockcount += 1
-        if command[0] == 'z':
-            blocks_zero += 1
-        elif command[0] == 'o':
-            blocks_ones += 1
-        elif command[0] == 'c':
-            blocks_copy += 1
-        elif command[0] == 'w':
-            blocks_new += 1
-        else:
-            raise Exception("Unknown command: %s" % (command[0],))
+            target_blockcount += 1
+            if command[0] == 'z':
+                blocks_zero += 1
+            elif command[0] == 'o':
+                blocks_ones += 1
+            elif command[0] == 'c':
+                blocks_copy += 1
+            elif command[0] == 'w':
+                blocks_new += 1
+            else:
+                raise Exception("Unknown command: %s" % (command[0],))
 
     footer = next(entry_stream)
     assert isinstance(footer, Footer)
@@ -1040,54 +1089,61 @@ def printInfo(patch_fd):
         patch_fd.close()
 
     # Phase II): Writing information and statistics
+    source_filesize = source_blockcount * blocksize
+
     print("blocksize", blocksize, "B"),
     print("source-blocks %6i" % (source_blockcount,))
     print("checksum-type", checksum_type)
     print("source-checksum", toHex(source_checksum))
 
-    source_filesize = source_blockcount * blocksize
-    target_filesize = target_blockcount * blocksize
+    if not skip_command_entries:
+        target_filesize = target_blockcount * blocksize
+        print("target-blocks %6i" % (target_blockcount,))
 
-    # NOTE: target_blockcount can be zero, when the target file is zero bytes
-    # in the size.
-    if target_blockcount == 0:
-        assert blocks_zero == 0
-        assert blocks_ones == 0
-        assert blocks_copy == 0
-        assert blocks_new == 0
-        blocks_zero_percentage = 0.0
-        blocks_ones_percentage = 0.0
-        blocks_copy_percentage = 0.0
-        blocks_new_percentage = 0.0
-    else:
-        blocks_zero_percentage = blocks_zero * 100 / target_blockcount
-        blocks_ones_percentage = blocks_ones * 100 / target_blockcount
-        blocks_copy_percentage = blocks_copy * 100 / target_blockcount
-        blocks_new_percentage = blocks_new * 100 / target_blockcount
-
-    print("target-blocks %6i" % (target_blockcount,))
     print("target-checksum", toHex(target_checksum))
 
-    print("blocks-zero   %6i (%6.02f %%)" % (blocks_zero, blocks_zero_percentage))
-    print("blocks-ones   %6i (%6.02f %%)" % (blocks_ones, blocks_ones_percentage))
-    print("blocks-copy   %6i (%6.02f %%)" % (blocks_copy, blocks_copy_percentage))
-    print("blocks-new    %6i (%6.02f %%)" % (blocks_new, blocks_new_percentage))
+    if not skip_command_entries:
+        # NOTE: target_blockcount can be zero, when the target file is zero bytes
+        # in the size.
+        if target_blockcount == 0:
+            assert blocks_zero == 0
+            assert blocks_ones == 0
+            assert blocks_copy == 0
+            assert blocks_new == 0
+            blocks_zero_percentage = 0.0
+            blocks_ones_percentage = 0.0
+            blocks_copy_percentage = 0.0
+            blocks_new_percentage = 0.0
+        else:
+            blocks_zero_percentage = blocks_zero * 100 / target_blockcount
+            blocks_ones_percentage = blocks_ones * 100 / target_blockcount
+            blocks_copy_percentage = blocks_copy * 100 / target_blockcount
+            blocks_new_percentage = blocks_new * 100 / target_blockcount
+
+        print("blocks-zero   %6i (%6.02f %%)" % (blocks_zero, blocks_zero_percentage))
+        print("blocks-ones   %6i (%6.02f %%)" % (blocks_ones, blocks_ones_percentage))
+        print("blocks-copy   %6i (%6.02f %%)" % (blocks_copy, blocks_copy_percentage))
+        print("blocks-new    %6i (%6.02f %%)" % (blocks_new, blocks_new_percentage))
+
     print("source-filesize %10i B (%7.01f MiB)" % (source_filesize, source_filesize // 1024**2))
     print("patch-filesize  %10i B (%7.01f MiB)" % (patch_filesize, patch_filesize // 1024**2))
-    print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))
 
-    if target_filesize != 0:
-        saved_bytes = target_filesize - patch_filesize
-        percentage = 100 * saved_bytes / target_filesize
-        print("Saving %i B (%6.02f %%) compared to sending the target file." % (saved_bytes, percentage))
-    else:
-        print("Target file is 0 bytes in size. Not saving anything.")
+    if not skip_command_entries:
+        print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))
+
+        if target_filesize != 0:
+            saved_bytes = target_filesize - patch_filesize
+            percentage = 100 * saved_bytes / target_filesize
+            print("Saving %i B (%6.02f %%) compared to sending the target file." % (saved_bytes, percentage))
+        else:
+            print("Target file is 0 bytes in size. Not saving anything.")
 
     return 0
 
 
 def info(args, parser):
     patch = args.patch  # FIXME rename, because it has the same name as the function
+    fast = args.fast
 
     if patch != "-":
         patch_fd = open(patch, "br")
@@ -1095,7 +1151,7 @@ def info(args, parser):
         patch_fd = sys.stdin.buffer
 
     try:
-        ret = printInfo(patch_fd)
+        ret = printInfo(patch_fd, skip_command_entries=fast)
     except InvalidMagic as e:
         print("ERROR: File `%s` is not a valid patch file: %s"
               % (patch, e),
@@ -1106,6 +1162,10 @@ def info(args, parser):
         ret = __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__
     except UnsupportedFileVersion as e:
         print("ERROR: %s" % (e,), file=sys.stderr)
+        ret = 1
+    except NotSeekable:
+        print("ERROR: Option '--fast' requires the patch argument to be seekable, e.g. a file!",
+              file=sys.stderr)
         ret = 1
 
     return ret
@@ -1260,6 +1320,9 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
     parser_info.set_defaults(func=info)
     parser_info.add_argument(dest="patch", type=str,
                              help="path to patch or '-' to read from stdin.")
+    parser_info.add_argument("--fast", dest="fast", action='store_true',
+                             default=False,
+                             help="don't read the whole patch file. Only print the available information in the header and footer. Patch file must be seekable.")
 
     parser_extinfo = subparsers.add_parser("extinfo", help="print blocksize and size of a ext2,3,4 filesystem image (Or just use 'dumpe2fs')")
     parser_extinfo.set_defaults(func=extinfo)

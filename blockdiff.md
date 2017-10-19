@@ -20,9 +20,14 @@ SYNOPSIS
 DESCRIPTION
 ===========
 
-FIXME add more stuff
-
-Description the commands:
+blockdiff is a binary patch tool for block base file and disk formats (like
+ext2,3,4 and btrfs). It's similar to *bsdiff* but not as general, because
+blockdiff is built on a more stricter assumption about the internal file
+format.  The diff algorithm only considers very long byte sequences, blocks of
+around ~4 KiB, not single bytes. That's why the runtime and memory usage of
+blockdiff is minimal compared to *bsdiff*. Of course at the cost of not being
+as general applicable as *bsdiff*.  The main usage area of `blockdiff` should
+be filesystem based A/B Updates of embedded devices.
 
 
 COMMANDS
@@ -102,22 +107,29 @@ General options for some commands:
     Disable informational output on stdout
 
 
-
 EXAMPLES
 ========
 
 ## Simple example
 
 
+## Piping patch file over SSH
 
+The patch file format is streamable and the commands `blockdiff diff` and
+`blockdiff patch` allow to write the patch file to stdout and read the patch
+file from stdin. The following example use that feature over SSH.
+
+    $ blockdiff diff --blocksize 512 old-file new-file - | \
+	ssh server "blockdiff patch old-file - output-file"
+
+In the above command the patch file is never written to the disk. It's directly
+streamed over the network.
 
 
 ## A/B Update scheme on block devices
 
 The primary use case for **blockdiff** is A/B update scheme in embedded
 devices.
-
-Slot A/B update scheme:
 
 On the Sender/build machine/host/server:
 
@@ -135,12 +147,8 @@ On Receiver/device/target/client:
 
 More sophisticated example with streaming in the patch file from the server:
 
-    target$ wget https://example.org/rootfs.v1.0.0-v1.1.0.patch | \
+    target$ wget -O - https://example.org/rootfs.v1.0.0-v1.1.0.patch | \
                 blockdiff patch /dev/mmcblk0p2 - /dev/mmcblk0p3
-
-
-
-
 
 
 SEE ALSO

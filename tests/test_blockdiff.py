@@ -196,7 +196,7 @@ class TestWritePatch(unittest.TestCase):
 
         # The binary format of the patch looks like
         # Header:
-        #         Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + checksum padding
         patch += b"A" * 20 + b"\0" * 44
@@ -234,7 +234,7 @@ class TestWritePatch(unittest.TestCase):
 
         # The binary format of the patch looks like
         # Header:
-        #         Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
         patch = b"BDIF\x4A\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x05"
         #         source checksum
         patch += b"A" * 64
@@ -273,7 +273,7 @@ class TestReadPatch(unittest.TestCase):
     def testInvalidFooterMagic(self):
         # Create binary Patch file
         # Header:
-        #         Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -295,7 +295,7 @@ class TestReadPatch(unittest.TestCase):
     def testNormal(self):
         # Create binary patch file
         # Header:
-        #         Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -338,7 +338,7 @@ class TestReadPatch(unittest.TestCase):
     def testInvalidFooterFormat(self):
         # Create binary Patch file
         # Header:
-        #         Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -364,7 +364,7 @@ class TestReadPatch(unittest.TestCase):
 
     def testEarlyEOFReached(self):
         # Header:
-        #               Magic+length                   version   blocksize         source-blockcount   checksum-type
+        #               magic+length             version   blocksize         source-blockcount   checksum-type
         patch_header = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #               source checksum + padding
         patch_header += b"A" * 20 + b"\0" * 44

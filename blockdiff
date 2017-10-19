@@ -1218,7 +1218,7 @@ def nocommand(args, parser):
 
 
 def main():
-    parser = ArgumentParser(description="Generate and apply patch files for block based file or disk formats",
+    parser = ArgumentParser(description="Generate and apply patch files for block based file or disk formats.",
                             epilog="""Licensed under *GPLv2* and *GPLv3*. See https://www.gnu.org/licenses/.
 Homepage: https://www.stefanchrist.eu/projects/blockdiff
 """)
@@ -1227,44 +1227,45 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
                         help="print program's version")
     subparsers = parser.add_subparsers()
 
-    parser_diff = subparsers.add_parser("diff", help="tbd")
+    parser_diff = subparsers.add_parser("diff", help="generate patch file from a source and target file.")
     parser_diff.set_defaults(func=diff)
     parser_diff.add_argument(dest="source", type=str,
-                             help="Filepath to source file.")
+                             help="path to source file.")
     parser_diff.add_argument(dest="target", type=str,
-                             help="Filepath for target file or '-' to read from stdin.")
+                             help="path to target file or '-' to read from stdin.")
     parser_diff.add_argument(dest="patch", type=str,
-                             help="File to write the patch or '-' to write to stdout. Existing files will be overwritten.")
+                             help="file to write the patch or '-' to write to stdout. Existing files will be overwritten.")
     parser_diff.add_argument("-b", "--blocksize", dest="blocksize", type=int,
                              default=4 * 1024,
-                             help="Blocksize in bytes (default: 4096 B = 4 KiB)")
+                             help="blocksize in bytes (default: 4096 B = 4 KiB)")
     parser_diff.add_argument("-c", "--checksum-type", dest="checksum_type", type=str,
                              default="SHA1",
-                             help="Checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
+                             help="checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
     parser_diff.add_argument("-s", "--slient", dest="silent", action='store_true',
                              default=False,
-                             help="Don't print verbose output on stdout")
+                             help="don't print verbose output on stdout")
 
-    parser_patch = subparsers.add_parser("patch", help="tbd")
+    parser_patch = subparsers.add_parser("patch", help="apply patch to source file and write out the target file.")
     parser_patch.set_defaults(func=patch)
-    parser_patch.add_argument(dest="source", type=str, help="tbd")
+    parser_patch.add_argument(dest="source", type=str,
+                              help="path to source file")
     parser_patch.add_argument(dest="patch", type=str,
-                              help="Path to patch or '-' to read from stdin.")
+                              help="path to patch or '-' to read from stdin.")
     parser_patch.add_argument(dest="target", type=str,
-                              help="File to write the output or '-' to write to stdout. Existing files will be overwritten.")
+                              help="file to write the output or '-' to write to stdout. Existing files will be overwritten.")
     parser_patch.add_argument("-s", "--slient", dest="silent", action='store_true',
                               default=False,
-                              help="Don't print verbose output on stdout")
+                              help="don't print verbose output on stdout")
 
-    parser_info = subparsers.add_parser("info", help="tbd")
+    parser_info = subparsers.add_parser("info", help="extract informations from patch file. ")
     parser_info.set_defaults(func=info)
     parser_info.add_argument(dest="patch", type=str,
-                             help="Path to patch or '-' to read from stdin.")
+                             help="path to patch or '-' to read from stdin.")
 
-    parser_extinfo = subparsers.add_parser("extinfo", help="Print blocksize and size of a ext2,3,4 filesystem image (Or just use 'dumpe2fs')")
+    parser_extinfo = subparsers.add_parser("extinfo", help="print blocksize and size of a ext2,3,4 filesystem image (Or just use 'dumpe2fs')")
     parser_extinfo.set_defaults(func=extinfo)
     parser_extinfo.add_argument(dest="filepath", type=str,
-                                help="Path to ext2,3,4 filesystem image (device path or file).")
+                                help="path to ext2,3,4 filesystem image (device path or file).")
 
     args = parser.parse_args()
 

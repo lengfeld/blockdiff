@@ -2,7 +2,7 @@
 blockdiff
 =========
 
-**blockdiff** is a binary patch tool for block base file and disk formats (like
+**blockdiff** is a binary patch tool for block based file and disk formats (like
 ext2,3,4 and btrfs). It's similar to [bsdiff] but not as general, because
 `blockdiff` is built on a more stricter assumption about the internal file
 format.  The diff algorithm only considers very long byte sequences, blocks of

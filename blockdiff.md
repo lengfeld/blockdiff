@@ -20,7 +20,7 @@ SYNOPSIS
 DESCRIPTION
 ===========
 
-blockdiff is a binary patch tool for block base file and disk formats (like
+blockdiff is a binary patch tool for block based file and disk formats (like
 ext2,3,4 and btrfs). It's similar to *bsdiff* but not as general, because
 blockdiff is built on a more stricter assumption about the internal file
 format.  The diff algorithm only considers very long byte sequences, blocks of
@@ -36,7 +36,8 @@ COMMANDS
 ## diff
 
 Generate a patch by computing the block based differences between 'source' and
-'target'.
+'target'. If the argument 'target' is '-', the source file is read from stdin.
+If the argument 'patch' is '-', the patch file is written to stdout.
 
 You should use the `--blocksize` parameter to match the blocksize used in your
 source/target file/disk format. For ext2,3,4 disk images the default blocksize
@@ -113,14 +114,17 @@ OPTIONS
 
 General options for some commands:
 
--q/--quiet::
-    Disable informational output on stdout
+## -q/--quiet
+
+Disable informational output on stdout
 
 
 EXAMPLES
 ========
 
 ## Simple example
+
+tbd
 
 
 ## Piping patch file over SSH

@@ -49,6 +49,8 @@ def main():
             block_md5sum = hashlib.md5(block).hexdigest()
             block_md5sums.add(block_md5sum)
 
+    # Read every file and split into blocks. Check whether all the file blocks
+    # are found in the image *block-aligned*.
     errors = 0
     for folder, folders, files in os.walk(dirname):
         for filename in files:

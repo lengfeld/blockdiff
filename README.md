@@ -215,3 +215,7 @@ of blockdiff is going to compress the patch files.
 Support interrupted patch operations. No need to download the whole patch file
 again. Just continue the download and patch operation in the middle of the
 patch file.
+
+Use asciidoc instead of pandoc to generate the manpage and the html for the
+homepage. Pandoc is a haskell programm and requires the haskel toolchain
+installed on the build system.

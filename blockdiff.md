@@ -35,6 +35,9 @@ COMMANDS
 
 ## diff
 
+Generate a patch by computing the block based differences between 'source' and
+'target'.
+
 You should use the `--blocksize` parameter to match the blocksize used in your
 source/target file/disk format. For ext2,3,4 disk images the default blocksize
 `4 KiB` is mostly correct.  You can verify the used ext blocksize with the
@@ -84,9 +87,10 @@ directly from stdin.
 
 Pass the argument '--fast' to only read and print the information from the
 header and footer structure in the patch file. This speeds up the execution
-time considerably, because not the whole file must be traversed. Note: Not all
-information can be printed and the 'patch' argument must be seekable, e.g.
-reading from stdin fails.
+time considerably, because the program must not traverse the whole patch file.
+Note: Not all information can be printed, the 'patch' argument must be
+seekable, e.g.  reading from stdin fails, and not every data corruption of the
+patch file can be detected.
 
 If the consumed patch file is corrupted, e.g. contains a bitflip, the command
 aborts, prints an error message on stderr and returns the exit code `6`.

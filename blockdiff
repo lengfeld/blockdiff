@@ -498,7 +498,7 @@ class Footer():
 #          For MD5 only the first 16 bytes are used. The rest is set to zero.
 #          For SHA512 the full 64 bytes are used.
 #       (This is located at the end of the file. This way the patch-file must
-#       only be traversed once, no seek to the beginngin is required)
+#       only be traversed once. No seeking to the start of the file required)
 def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
     """Consumes a patch entry generator, encodes it and writes it to the
        patchfile.
@@ -753,7 +753,7 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
 
     source_checksum_padding = header_payload_checksum[checksum_length:]
     if not all(i == 0 for i in source_checksum_padding):
-        raise FileFormatError("Source checkums padding is not zero: %s!" % (source_checksum_padding,))
+        raise FileFormatError("Source checksums padding is not zero: %s!" % (source_checksum_padding,))
 
     yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
 
@@ -832,6 +832,9 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
         # bytes_read counter virtually, so the patch file size calculation does
         # not become out of sync. It must return the same value as in the
         # <skip_command_entries> is false case.
+        #
+        # FIXME This only works reliable, when the file position of <patch_fd>
+        # was zero at the start of the function call.
         assert pos > bytes_read
         patch_bytes_read = pos
 
@@ -878,7 +881,7 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
         if len(after_footer) != 0:
             raise DataCorruption("No EOF after footer entry. Additional bytes at end of patch file!")
 
-    # HACK HACKY: Using mutable list object for by-reference semantices to
+    # HACK HACKY: Using mutable list object for by-reference  semantics to
     # return additional information after the generator has finished.
     if len(filesize_hacky_list) >= 1:
         # At the end of the function the count of bytes, which are read,

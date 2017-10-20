@@ -209,13 +209,17 @@ class TestWritePatch(unittest.TestCase):
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count
+        patch += b"\x04\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum                 Padding
         patch += b"BBBBBBBBBBBBBBBBBBBB" + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x06>\xb16"
+        patch += b"\xa4q\x1b\x10"
 
         self.assertEqual(patch_generated, patch)
 
@@ -246,14 +250,18 @@ class TestWritePatch(unittest.TestCase):
         #        block-copy                                 block-write zero-write ones-write stop
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
-        #         Magic           Length
-        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        #         Magic    Length
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count
+        patch += b"\x04\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 64
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\xd8n\xe5\xb4"
+        patch += b"\xe2\xebMg"
 
         self.assertEqual(patch_generated, patch)
 
@@ -308,23 +316,28 @@ class TestReadPatch(unittest.TestCase):
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count
+        patch += b"\x04\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x06>\xb16"
+        patch += b"\xa4q\x1b\x10"
 
         patch_fd = BytesStreamReader(patch)
 
-        filesize_hacky_list = [0]
+        additional_return_values = []
         entries = list(readPatch(patch_fd,
-                                 filesize_hacky_list=filesize_hacky_list,
+                                 additional_return_values=additional_return_values,
                                  skip_command_entries=True))
         self.assertEqual(entries, [Header(2, 3, "SHA1", b"A" * 20),
                                    Footer(b"B" * 20)])
-        self.assertEqual(filesize_hacky_list[0], len(patch))
+        self.assertEqual(additional_return_values[0], len(patch))
+        self.assertEqual(additional_return_values[1], 4)  # target_blockcount
 
     def testSkipCommandEntriesWithExceptionOnNotSeekable(self):
         # Create binary patch file
@@ -342,11 +355,15 @@ class TestReadPatch(unittest.TestCase):
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count
+        patch += b"\x04\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
         patch += b"\x06>\xb16"
 
@@ -371,13 +388,17 @@ class TestReadPatch(unittest.TestCase):
         patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
         # Footer:
         #         Magic           Length
-        patch += b"BDIE" + b"\x44\x00\x00\x00"
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count
+        patch += b"\x04\x00\x00\x00"
         #         Commands CRC32 checksum
         patch += b"\xac\xb6\x12\xdd"
         #         Checksum
         patch += b"B" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
         #         Container CRC32 checksum
-        patch += b"\x06>\xb16"
+        patch += b"\xa4q\x1b\x10"
 
         patch_fd = BytesStreamReader(patch)
 
@@ -389,6 +410,46 @@ class TestReadPatch(unittest.TestCase):
                                    ('o',),
                                    ('s',),
                                    Footer(b"B" * 20)])
+
+    def testFooterTargetBlockCountIsWrong(self):
+        # Create binary patch file
+        # Header:
+        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
+        #         source checksum + padding
+        patch += b"A" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00"
+        #         Container CRC32 checksum
+        patch += b"\x97\xe2\xdc\xc8"
+        # Entries:
+        #        block-copy                                 block-write zero-write ones-write stop
+        patch += b"\x03\xdd\xcc\xbb\xaa\x01\x00\x00\x00" + b"\x04cc" + b"\x02" + b"\x01" + b"\x00"
+        # Footer:
+        #         Magic    Length
+        patch += b"BDIE" + b"\x48\x00\x00\x00"
+        #         Target block count (INVALID)
+        patch += b"\xff\x00\x00\x00"
+        #         Commands CRC32 checksum
+        patch += b"\xac\xb6\x12\xdd"
+        #         Checksum
+        patch += b"B" * 20 + b"\0" * 44
+        #         Container Zero padding
+        patch += b"\x00\x00\x00\x00"
+        #         Container CRC32 checksum
+        patch += b"\xfem\x89j"
+
+        patch_fd = BytesStreamReader(patch)
+
+        # Except and check the exception explicitly instead of using
+        # assertRaises() to also compare the Exception message.
+        try:
+            list(readPatch(patch_fd))
+            self.assertTrue(False)  # Never reached
+        except Exception as e:
+            self.assertIsInstance(e, FileFormatError)
+            self.assertEqual(str(e),
+                             "Target block count in footer (=255 blocks) is not equal to count of commands(type!=stop) (=4 blocks)!")
 
     def testInvalidHeaderFormat(self):
         # Create binary Patch file, with correct patch file format version, but
@@ -827,9 +888,9 @@ blocks-ones        1 ( 25.00 %)
 blocks-copy        1 ( 25.00 %)
 blocks-new         1 ( 25.00 %)
 source-filesize          6 B (    0.0 MiB)
-patch-filesize         183 B (    0.0 MiB)
+patch-filesize         191 B (    0.0 MiB)
 target-filesize          8 B (    0.0 MiB)
-Saving -175 B (-2187.50 %) compared to sending the target file.
+Saving -183 B (-2287.50 %) compared to sending the target file.
 """)
 
     def testFast(self):
@@ -863,9 +924,12 @@ b"""blocksize 2 B
 source-blocks      3
 checksum-type SHA1
 source-checksum 0000000000000000000000000000000000000000
+target-blocks      4
 target-checksum 0000000000000000000000000000000000000000
 source-filesize          6 B (    0.0 MiB)
-patch-filesize         173 B (    0.0 MiB)
+patch-filesize         181 B (    0.0 MiB)
+target-filesize          8 B (    0.0 MiB)
+Saving -173 B (-2162.50 %) compared to sending the target file.
 """)
 
     def testSHA512(self):
@@ -897,9 +961,9 @@ blocks-ones        1 ( 25.00 %)
 blocks-copy        1 ( 25.00 %)
 blocks-new         1 ( 25.00 %)
 source-filesize          6 B (    0.0 MiB)
-patch-filesize         183 B (    0.0 MiB)
+patch-filesize         191 B (    0.0 MiB)
 target-filesize          8 B (    0.0 MiB)
-Saving -175 B (-2187.50 %) compared to sending the target file.
+Saving -183 B (-2287.50 %) compared to sending the target file.
 """)
 
     def testPatchWithZeroLengthedSource(self):
@@ -929,9 +993,9 @@ blocks-ones        0 (  0.00 %)
 blocks-copy        0 (  0.00 %)
 blocks-new         1 ( 50.00 %)
 source-filesize          0 B (    0.0 MiB)
-patch-filesize         173 B (    0.0 MiB)
+patch-filesize         181 B (    0.0 MiB)
 target-filesize          4 B (    0.0 MiB)
-Saving -169 B (-4225.00 %) compared to sending the target file.
+Saving -177 B (-4425.00 %) compared to sending the target file.
 """)
 
     def testTargetBlockCountIsZero(self):
@@ -946,7 +1010,7 @@ Saving -169 B (-4225.00 %) compared to sending the target file.
                             Footer(b"\0" * 20)]
             writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
 
-        self.assertEqual(os.stat(patch_filepath).st_size, 169)
+        self.assertEqual(os.stat(patch_filepath).st_size, 177)
 
         # Feed patch file into `blockdiff info`
         p = Popen([BLOCKDIFF, "info", "patch"], stdout=PIPE, cwd=dir)
@@ -964,7 +1028,7 @@ blocks-ones        0 (  0.00 %)
 blocks-copy        0 (  0.00 %)
 blocks-new         0 (  0.00 %)
 source-filesize          6 B (    0.0 MiB)
-patch-filesize         169 B (    0.0 MiB)
+patch-filesize         177 B (    0.0 MiB)
 target-filesize          0 B (    0.0 MiB)
 Target file is 0 bytes in size. Not saving anything.
 """)

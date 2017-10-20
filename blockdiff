@@ -34,6 +34,7 @@ __VERSION__ = "0.1.y"
 __FILE_MAGIC_HEADER__ = b"BDIF"
 __FILE_MAGIC_FOOTER__ = b"BDIE"
 __FILE_FORMAT_VERSION__ = 1
+__FILE_FOOTER_PAYLOAD_LENGTH__ = 72
 
 
 __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__ = 5     # See also `blockdiff.md`
@@ -457,6 +458,11 @@ class Header():
                                            self._source_checksum)
 
 
+# NOTE: This class has no 1to1 relation to the on disk footer structure.  The
+# footer structure contains additional fields like the target block count and
+# the command entries CRC32. The class is a program internal structure to carry
+# only non redundant information and without any data corruptions checksums,
+# because it's already verified while reading.
 class Footer():
     def __init__(self, target_checksum):
         assert isinstance(target_checksum, bytes)
@@ -493,7 +499,13 @@ class Footer():
 #    - u8 type (0: stop, 1: ones, 2: zero, 3: copy, 4: new)
 #       - plus payload
 #  Footer:
-#    - u32le add CRC32 of command stream
+#    - u32le target block count
+#       Infact this is redundant information. In the patch file format the
+#       count of command entries (without the special entry(type=stop) is equal
+#       to the target block count. But storing the target block count
+#       information in the footer explicitly, allows 'blockdiff info --fast' to
+#       print more information without traverse the whole patch file.
+#    - u32le CRC32 of command entries
 #    - u8[64] checksum[T] of target file
 #          For MD5 only the first 16 bytes are used. The rest is set to zero.
 #          For SHA512 the full 64 bytes are used.
@@ -536,8 +548,7 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
 
     commands_crc32 = 0  # Initial value for CRC32
 
-    # NOTE New naming convention "entry generator for [header, command, command(=stop), footer]"
-    for command in entry_stream:
+    for i, command in enumerate(entry_stream, 1):
         if command[0] == "z":
             entry = b"\x02"
         elif command[0] == "o":
@@ -568,22 +579,24 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
             assert command[0] == "s"
             break  # Stop Command reached and stop command written
 
+    target_blockcount = i - 1  # Reduce block count because stop entry becomes no target block!
+
     footer = next(entry_stream)
     assert isinstance(footer, Footer)
 
     target_checksum = footer.getTargetChecksum()
 
-    commands_crc32_uint32le = struct.pack("<I", commands_crc32)
+    assert 0 <= target_blockcount < 2**64
 
-    footer_payload = b""
-    footer_payload += commands_crc32_uint32le
+    footer_payload = struct.pack("<II",
+                                 target_blockcount,
+                                 commands_crc32)
     footer_payload += target_checksum
-
     target_checksum_padding = b"\0" * (64 - len(target_checksum))
     footer_payload += target_checksum_padding
 
-    # Footer playload is always 64 bytes long.
-    assert len(footer_payload) == 68
+    # Footer payload is always 72 bytes long.
+    assert len(footer_payload) == __FILE_FOOTER_PAYLOAD_LENGTH__
 
     container_footer = packContainer(__FILE_MAGIC_FOOTER__, footer_payload)
     patch_fd.write(container_footer)
@@ -680,7 +693,7 @@ class UnsupportedFileVersion(Exception):
     pass
 
 
-def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_command_entries=False):
+def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip_command_entries=False):
     """Returns an entry generator. The argument <patch_fd> can be a file or stream.
 
     If flag <skip_command_entries> is false, which is the default, the generator
@@ -759,6 +772,7 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
 
     if skip_command_entries is False:
         commands_crc32 = 0  # Initial value for CRC32
+        target_blockcount_from_commands = 0
         while True:
             # Reading commands entries until the stop command is reached. A priori
             # the code/format does not know how many commands the patch file
@@ -809,6 +823,8 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
                 # Nevertheless an invalid command type byte is detected by the
                 # command CRC32 checksum stored in the footer structure, too.
                 raise DataCorruption("Unkown command type: %s" % (command_type,))
+
+            target_blockcount_from_commands += 1
     else:
         # Skip command entries in the patch file format after reading the
         # header structure. File in <patch_fd> must be seekable. Otherwise it's
@@ -822,8 +838,11 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
         # NOTE: Violating the 'It's better to ask for forgiveness than for
         # permission'-Rule here.
         if patch_fd.seekable():
-            # 12 bytes of container metadata, 68 bytes of footer structure payload.
-            pos = patch_fd.seek(-(12 + 68), 2)
+            # 16 bytes of container metadata, 72 bytes of footer structure payload.
+            #
+            # FIXME add function to calculate the size of the containter for a
+            # given payload length and replace the magic constant '16' here.
+            pos = patch_fd.seek(-(16 + __FILE_FOOTER_PAYLOAD_LENGTH__), 2)
         else:
             raise NotSeekable("The patch file is not seekable!")
 
@@ -851,28 +870,41 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
     except InvalidCRC as e:
         raise DataCorruption("Invalid CRC32 in footer: %s" % (e,))
 
-    if len(footer_payload) != 68:
-        raise FileFormatError("Footer payload must be 68 bytes long")
+    if len(footer_payload) != __FILE_FOOTER_PAYLOAD_LENGTH__:
+        raise FileFormatError("Footer payload must be %d bytes long!" % (__FILE_FOOTER_PAYLOAD_LENGTH__,))
 
     checksum_length = __checksum_lengths__[checksum_type]
 
-    commands_crc32_in_file_uint32le = footer_payload[:4]
-    target_checksum = footer_payload[4:4 + checksum_length]
-    target_checksum_padding = footer_payload[4 + checksum_length:]
+    target_blockcount_in_file, commands_crc32_in_file = struct.unpack("<II", footer_payload[:8])
+    target_checksum = footer_payload[8:8 + checksum_length]
+    target_checksum_padding = footer_payload[8 + checksum_length:]
 
     if not all(i == 0 for i in target_checksum_padding):
         raise FileFormatError("Target checkums padding is not zero: %s!" % (target_checksum_padding,))
 
     if not skip_command_entries:
-        # Can only check CRC32 of command entries, when we have read them.
-        commands_crc32_in_file = struct.unpack("<I", commands_crc32_in_file_uint32le)[0]
-
+        # Check CRC32 of command entries, when the above code as read them.
         if commands_crc32_in_file != commands_crc32:
             raise DataCorruption("Corrupted bytes in the command stream. Computed CRC32 is %d (bytes %s). Expected CRC32 is %d (bytes %s)!" %
                                  (commands_crc32,
                                   struct.pack("<I", commands_crc32),
                                   commands_crc32_in_file,
                                   struct.pack("<I", commands_crc32_in_file)))
+
+        # Verify redundant information: Compare the count of
+        # commands(type=!stop) in the patch file with the stored 'target block
+        # count' in the footer structure.
+        if target_blockcount_in_file != target_blockcount_from_commands:
+            # Note: Using the exception DataCorruption would be wrong here. If
+            # the block count in the footer structure is wrong, it cannot be
+            # caused by a bitflip error, because the command entries and the
+            # footer structure is already checked by CRC32. A evil user has
+            # created a patch file with a wrong target block count.
+            raise FileFormatError("Target block count in footer (=%d blocks) is not equal to count of commands(type!=stop) (=%d blocks)!" %
+                                  (target_blockcount_in_file,
+                                   target_blockcount_from_commands))
+
+    target_blockcount = target_blockcount_in_file
 
     # Must be before the last yield statement. Otherwise consumer never reaches
     # the code.
@@ -881,12 +913,14 @@ def readPatch(patch_fd, filesize_hacky_list=[], error_on_no_eof=False, skip_comm
         if len(after_footer) != 0:
             raise DataCorruption("No EOF after footer entry. Additional bytes at end of patch file!")
 
-    # HACK HACKY: Using mutable list object for by-reference  semantics to
+    # HACKY HACK: Using mutable list object for by-reference  semantics to
     # return additional information after the generator has finished.
-    if len(filesize_hacky_list) >= 1:
-        # At the end of the function the count of bytes, which are read,
-        # correspond to the patch file.
-        filesize_hacky_list[0] = patch_bytes_read
+    additional_return_values.clear()
+    #
+    # At the end of the function the count of bytes, which are read,
+    # correspond to the patch file.
+    additional_return_values.append(patch_bytes_read)
+    additional_return_values.append(target_blockcount)
 
     yield Footer(target_checksum)
 
@@ -1033,9 +1067,9 @@ def patch(args, parser):
 
 def printInfo(patch_fd, skip_command_entries=False):
     # Phase I): Reading the patch file
-    filesize_hacky_list = [0]
+    additional_return_values = []
     entry_stream = readPatch(patch_fd,
-                             filesize_hacky_list=filesize_hacky_list,
+                             additional_return_values=additional_return_values,
                              error_on_no_eof=True,
                              skip_command_entries=skip_command_entries)
 
@@ -1051,7 +1085,6 @@ def printInfo(patch_fd, skip_command_entries=False):
         blocks_ones = 0
         blocks_copy = 0
         blocks_new = 0
-        target_blockcount = 0
         for command in entry_stream:
             assert isinstance(command, tuple)
             if command[0] == 's':
@@ -1059,7 +1092,6 @@ def printInfo(patch_fd, skip_command_entries=False):
                 # reached.
                 break  # Command(type=stop)
 
-            target_blockcount += 1
             if command[0] == 'z':
                 blocks_zero += 1
             elif command[0] == 'o':
@@ -1083,25 +1115,24 @@ def printInfo(patch_fd, skip_command_entries=False):
     except StopIteration:
         pass
 
-    # FIXME The readPatch() generator should return the current
-    # file position/already read bytes another way! Using the mutbale list
-    # as passed-by-ref workaround is HACKY.
-    patch_filesize = filesize_hacky_list[0]
+    # FIXME The readPatch() generator should return additional return values
+    # patch filesize(= count of read bytes) and the target_blockcount another
+    # way.  Using the mutable list as passed-by-ref workaround is HACKY.
+    patch_filesize = additional_return_values[0]
+    target_blockcount = additional_return_values[1]
 
     if patch != "-":
         patch_fd.close()
 
     # Phase II): Writing information and statistics
     source_filesize = source_blockcount * blocksize
+    target_filesize = target_blockcount * blocksize
 
     print("blocksize", blocksize, "B"),
     print("source-blocks %6i" % (source_blockcount,))
     print("checksum-type", checksum_type)
     print("source-checksum", toHex(source_checksum))
-
-    if not skip_command_entries:
-        target_filesize = target_blockcount * blocksize
-        print("target-blocks %6i" % (target_blockcount,))
+    print("target-blocks %6i" % (target_blockcount,))
 
     print("target-checksum", toHex(target_checksum))
 
@@ -1131,15 +1162,14 @@ def printInfo(patch_fd, skip_command_entries=False):
     print("source-filesize %10i B (%7.01f MiB)" % (source_filesize, source_filesize // 1024**2))
     print("patch-filesize  %10i B (%7.01f MiB)" % (patch_filesize, patch_filesize // 1024**2))
 
-    if not skip_command_entries:
-        print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))
+    print("target-filesize %10i B (%7.01f MiB)" % (target_filesize, target_filesize // 1024**2))
 
-        if target_filesize != 0:
-            saved_bytes = target_filesize - patch_filesize
-            percentage = 100 * saved_bytes / target_filesize
-            print("Saving %i B (%6.02f %%) compared to sending the target file." % (saved_bytes, percentage))
-        else:
-            print("Target file is 0 bytes in size. Not saving anything.")
+    if target_filesize != 0:
+        saved_bytes = target_filesize - patch_filesize
+        percentage = 100 * saved_bytes / target_filesize
+        print("Saving %i B (%6.02f %%) compared to sending the target file." % (saved_bytes, percentage))
+    else:
+        print("Target file is 0 bytes in size. Not saving anything.")
 
     return 0
 

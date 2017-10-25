@@ -43,7 +43,7 @@ tests:                        ### Runs the python unit tests
 #   E501 line too long (83 > 79 characters)
 .PHONY: check
 check:                        ### Runs the pep8 source code checker
-	@pep8 --ignore E501 blockdiff tests/*.py|| true
+	@pep8 --ignore E501 blockdiff tests/*.py || true
 
 
 .PHONY: install

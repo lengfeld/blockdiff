@@ -217,5 +217,9 @@ again. Just continue the download and patch operation in the middle of the
 patch file.
 
 Use asciidoc instead of pandoc to generate the manpage and the html for the
-homepage. Pandoc is a haskell programm and requires the haskel toolchain
+homepage. Pandoc is a haskell programm and requires the haskell toolchain
 installed on the build system.
+
+Add argument "auto" for option "--blocksize" in command 'blockdiff diff'. The
+program should try to detect the suitable blocksize from the file, e.g. header
+of ext2,3,4 images or perdefined for tar.

@@ -142,17 +142,17 @@ class TestReadTargetAndGenPatchCommands(unittest.TestCase):
         source_fd = BytesStreamReader(b"aabb")
         source_hashtable = {hashlib.md5(b"aa").hexdigest(): ([0], binascii.crc32(b"aa")),
                             hashlib.md5(b"bb").hexdigest(): ([1], binascii.crc32(b"bb"))}
-        checksum_type = "SHA1"
+        hash_alg = "SHA1"
         source_blockcount = 2
         source_checksum = hashlib.sha1(b"aabb").digest()
         target_filepath = "some-filename"
         target = b"bbcc\0\0\xff\xff"
         target_fd = BytesStreamReader(target)
-        commands = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
+        commands = readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
 
         target_checksum = hashlib.sha1(target).digest()
         self.assertEqual(list(commands),
-                         [Header(blocksize, source_blockcount, checksum_type, source_checksum),
+                         [Header(blocksize, source_blockcount, hash_alg, source_checksum),
                           ('c', binascii.crc32(b"bb"), 1),
                           ('w', b'cc'),  # entry type, target block
                           ('z',),
@@ -165,17 +165,17 @@ class TestReadTargetAndGenPatchCommands(unittest.TestCase):
         blocksize = 2
         source_fd = BytesStreamReader(b"aabb")
         source_hashtable = {}   # can be empty for tests
-        checksum_type = "SHA1"
+        hash_alg = "SHA1"
         source_blockcount = 2
         source_checksum = hashlib.sha1(b"aabb").digest()
         target_filepath = "some-filename"
         target = b""
         target_fd = BytesStreamReader(target)
-        commands = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
+        commands = readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target_filepath, target_fd)
 
         target_checksum = hashlib.sha1(target).digest()
         self.assertEqual(list(commands),
-                         [Header(blocksize, source_blockcount, checksum_type, source_checksum),
+                         [Header(blocksize, source_blockcount, hash_alg, source_checksum),
                           ('s',),
                           Footer(target_checksum)])
 
@@ -196,7 +196,7 @@ class TestWritePatch(unittest.TestCase):
 
         # The binary format of the patch looks like
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + checksum padding
         patch += b"A" * 20 + b"\0" * 44
@@ -238,7 +238,7 @@ class TestWritePatch(unittest.TestCase):
 
         # The binary format of the patch looks like
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4A\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x05"
         #         source checksum
         patch += b"A" * 64
@@ -281,7 +281,7 @@ class TestReadPatch(unittest.TestCase):
     def testInvalidFooterMagic(self):
         # Create binary Patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -303,7 +303,7 @@ class TestReadPatch(unittest.TestCase):
     def testSkipCommandEntries(self):
         # Create binary patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -342,7 +342,7 @@ class TestReadPatch(unittest.TestCase):
     def testSkipCommandEntriesWithExceptionOnNotSeekable(self):
         # Create binary patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -375,7 +375,7 @@ class TestReadPatch(unittest.TestCase):
     def testNormal(self):
         # Create binary patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -414,7 +414,7 @@ class TestReadPatch(unittest.TestCase):
     def testFooterTargetBlockCountIsWrong(self):
         # Create binary patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -462,7 +462,7 @@ class TestReadPatch(unittest.TestCase):
     def testInvalidFooterFormat(self):
         # Create binary Patch file
         # Header:
-        #         magic+length            version   blocksize         source-blockcount   checksum-type
+        #         magic+length            version   blocksize         source-blockcount   hash-alg
         patch = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #         source checksum + padding
         patch += b"A" * 20 + b"\0" * 44
@@ -488,7 +488,7 @@ class TestReadPatch(unittest.TestCase):
 
     def testEarlyEOFReached(self):
         # Header:
-        #               magic+length             version   blocksize         source-blockcount   checksum-type
+        #               magic+length             version   blocksize         source-blockcount   hash-alg
         patch_header = b"BDIF\x4a\x00\x00\x00" + b"\x01" + b"\x02\x00\x00\x00\x03\x00\x00\x00" + b"\x03"
         #               source checksum + padding
         patch_header += b"A" * 20 + b"\0" * 44
@@ -879,7 +879,7 @@ class TestInfo(TestCaseTempFolder):
         self.assertEqual(stdout,
 b"""blocksize 2 B
 source-blocks      3
-checksum-type SHA1
+hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      4
 target-checksum 0000000000000000000000000000000000000000
@@ -922,7 +922,7 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
         self.assertEqual(stdout,
 b"""blocksize 2 B
 source-blocks      3
-checksum-type SHA1
+hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      4
 target-checksum 0000000000000000000000000000000000000000
@@ -952,7 +952,7 @@ Saving -173 B (-2162.50 %) compared to sending the target file.
         self.assertEqual(stdout,
 b"""blocksize 2 B
 source-blocks      3
-checksum-type SHA512
+hash-algorithm SHA512
 source-checksum 01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101
 target-blocks      4
 target-checksum 02020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202
@@ -984,7 +984,7 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
         self.assertEqual(stdout,
 b"""blocksize 2 B
 source-blocks      0
-checksum-type SHA1
+hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      2
 target-checksum 0000000000000000000000000000000000000000
@@ -1019,7 +1019,7 @@ Saving -177 B (-4425.00 %) compared to sending the target file.
         self.assertEqual(stdout,
 b"""blocksize 2 B
 source-blocks      3
-checksum-type SHA1
+hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
 target-blocks      0
 target-checksum 0000000000000000000000000000000000000000
@@ -1280,11 +1280,11 @@ class TestDiff(TestCaseTempFolder):
         self.assertIn(b"1 byte(s) left and blocksize is 2 byte", stderr)
 
     def testInvalidChecksumType(self):
-        p = Popen([BLOCKDIFF, "diff", "--checksum-type=INVALID", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "diff", "--hash-alg=INVALID", "source", "-", "-"],
                   stderr=PIPE)
         _, stderr = p.communicate()
         self.assertEqual(p.returncode, 64)  # 64 == EX_USAGE. See /usr/include/sysexits.h
-        self.assertIn(b"Value 'INVALID' is not a valid checksum type!", stderr)
+        self.assertIn(b"Value 'INVALID' is not a valid hash algorithm!", stderr)
 
     def testChecksumSHA512(self):
         dir = join(self.tmpdir, "testChecksumSHA512")
@@ -1296,8 +1296,8 @@ class TestDiff(TestCaseTempFolder):
 
         target = b"aabb"
 
-        # Check also short options '-b' and '-c' here.
-        p = Popen([BLOCKDIFF, "diff", "-b", "2", "-c", "SHA512", "source", "-", "-"],
+        # Check also short options '-b' and '-a' here.
+        p = Popen([BLOCKDIFF, "diff", "-b", "2", "-a", "SHA512", "source", "-", "-"],
                   stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(target)
         self.assertEqual(p.returncode, 0)

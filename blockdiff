@@ -42,17 +42,23 @@ __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__ = 6   # See also `blockdiff.md`
 __EXIT_CODE_SOURCE_FILE_DATA_CORRUPTION__ = 7  # See also `blockdiff.md`
 
 
-# value 0 is reserved in __checksum_types__
-__checksum_types__ = {"MD5": 2,
-                      "SHA1": 3,
-                      "SHA256": 4,
-                      "SHA512": 5}
+# Nomenclature: The term 'hash-alg' stands for 'hash algorithm' and describes
+# the cryptographic one-way hash function. Examples are SHA1 or MD5. The term
+# 'digest' is the short form of 'message digest' and is the output of the hash
+# function for a given input. It's also called the checksum.
+
+# value 0 is reserved in __hash_algs__
+__hash_algs__ = {"MD5": 2,
+                 "SHA1": 3,
+                 "SHA256": 4,
+                 "SHA512": 5}
 
 
-__checksum_lengths__ = {"MD5": 16,
-                        "SHA1": 20,
-                        "SHA256": 32,
-                        "SHA512": 64}
+# Values are in bytes, not bits.
+__digest_lenghts__ = {"MD5": 16,
+                      "SHA1": 20,
+                      "SHA256": 32,
+                      "SHA512": 64}
 
 
 def toHex(b):
@@ -211,7 +217,7 @@ class AligmentError(Exception):
     pass
 
 
-def readSource(filename, blocksize, checksum_type, stdoutAllowed=False):
+def readSource(filename, blocksize, hash_alg, stdoutAllowed=False):
     block_zero = bytes([0] * blocksize)
     assert len(block_zero) == blocksize
 
@@ -230,7 +236,7 @@ def readSource(filename, blocksize, checksum_type, stdoutAllowed=False):
     if source_filesize % blocksize != 0:
         raise AligmentError("Source file '%s' is not block aligned. %d byte(s) left and blocksize is %d byte(s)!" % (filename, source_filesize % blocksize, blocksize))
 
-    source_checksum_m = getChecksumGenerator(checksum_type)
+    source_checksum_m = getChecksumGenerator(hash_alg)
 
     percent_lasttime = None   # Speed optimization for statusbar
 
@@ -298,22 +304,22 @@ def readSource(filename, blocksize, checksum_type, stdoutAllowed=False):
     return source_hashtable, source_blockcount, source_checksum
 
 
-def getChecksumGenerator(checksum_type):
-    if checksum_type == "MD5":
+def getChecksumGenerator(hash_alg):
+    if hash_alg == "MD5":
         checksum_m = hashlib.md5()
-    elif checksum_type == "SHA1":
+    elif hash_alg == "SHA1":
         checksum_m = hashlib.sha1()
-    elif checksum_type == "SHA256":
+    elif hash_alg == "SHA256":
         checksum_m = hashlib.sha256()
-    elif checksum_type == "SHA512":
+    elif hash_alg == "SHA512":
         checksum_m = hashlib.sha512()
     else:
-        raise ValueError("Checksum-type '%s' unknown!" % (checksum_type,))
+        raise ValueError("Checksum-type '%s' unknown!" % (hash_alg,))
 
     return checksum_m
 
 
-def readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=False):
+def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=False):
     """ returns a entry generator object. First, last element and the element
         before the last element are special:
            [Header, command(type=!stop)*, command(type=stop), Footer]
@@ -330,9 +336,9 @@ def readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_ha
     blocks_new = 0
     blocks_count = 0
 
-    target_checksum_m = getChecksumGenerator(checksum_type)
+    target_checksum_m = getChecksumGenerator(hash_alg)
 
-    yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
+    yield Header(blocksize, source_blockcount, hash_alg, source_checksum)
 
     if stdoutAllowed and sys.stdout.isatty():
         print("Reading target '%s' and writing patch. Block statistics:" % (target,))
@@ -406,26 +412,26 @@ def readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_ha
 
     if stdoutAllowed and sys.stdout.isatty():
         print("%s checksum of target file: %s" %
-              (checksum_type, toHex(target_checksum)))
+              (hash_alg, toHex(target_checksum)))
 
     yield Footer(target_checksum)
 
 
 class Header():
-    def __init__(self, blocksize, source_blockcount, checksum_type, source_checksum):
+    def __init__(self, blocksize, source_blockcount, hash_alg, source_checksum):
         assert isinstance(source_checksum, bytes)
-        assert isinstance(checksum_type, str)
+        assert isinstance(hash_alg, str)
         # FIXME add file size limitations
         self._blocksize = blocksize
         self._source_blockcount = source_blockcount
 
-        if checksum_type not in __checksum_lengths__.keys():
-            raise ValueError("Checksum type '%s' not supported!." % (checksum_type,))
-        self._checksum_type = checksum_type
+        if hash_alg not in __digest_lenghts__.keys():
+            raise ValueError("Hash algorithm '%s' not supported!." % (hash_alg,))
+        self._hash_alg = hash_alg
 
-        checksum_length = __checksum_lengths__[checksum_type]
-        if len(source_checksum) != checksum_length:
-            raise ValueError("Checksum '%s' is not %d bytes long!" % (source_checksum, checksum_length))
+        digest_length = __digest_lenghts__[hash_alg]
+        if len(source_checksum) != digest_length:
+            raise ValueError("Checksum '%s' is not %d bytes long!" % (source_checksum, digest_length))
         self._source_checksum = source_checksum
 
     def getBlocksize(self):
@@ -434,8 +440,8 @@ class Header():
     def getSourceBlockCount(self):
         return self._source_blockcount
 
-    def getChecksumType(self):
-        return self._checksum_type
+    def getHashAlgorithm(self):
+        return self._hash_alg
 
     def getSourceChecksum(self):
         return self._source_checksum
@@ -447,14 +453,14 @@ class Header():
 
         return self._blocksize == y._blocksize and \
             self._source_blockcount == y._source_blockcount and \
-            self._checksum_type == y._checksum_type and \
+            self._hash_alg == y._hash_alg and \
             self._source_checksum == y._source_checksum
 
     # Only used in unittests
     def __repr__(self):
         return "Header(%s, %s, %s, %s)" % (self._blocksize,
                                            self._source_blockcount,
-                                           self._checksum_type,
+                                           self._hash_alg,
                                            self._source_checksum)
 
 
@@ -487,7 +493,7 @@ class Footer():
 #
 #  Header:
 #    - u8 version (1: standard)
-#    - u8 checksum type (see above)  'T'
+#    - u8 hash algorithm (see above)
 #    - u32le blocksize
 #    - u32le source block count (not all inputs are really required)
 #    # Putting the target block count in the header is impossible, because
@@ -521,21 +527,21 @@ def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
 
     blocksize = header.getBlocksize()
     source_blockcount = header.getSourceBlockCount()
-    checksum_type = header.getChecksumType()
+    hash_alg = header.getHashAlgorithm()
     source_checksum = header.getSourceChecksum()
 
     patch_file_version = __FILE_FORMAT_VERSION__
-    checksum_type_number = __checksum_types__[checksum_type]
+    hash_alg_number = __hash_algs__[hash_alg]
 
     assert 0 <= patch_file_version < 256
     assert 0 <= blocksize < 2 ** 32
     assert 0 <= source_blockcount < 2 ** 32
-    assert 0 <= checksum_type_number < 256
+    assert 0 <= hash_alg_number < 256
     header_payload = struct.pack("<BIIB",
                                  patch_file_version,
                                  blocksize,
                                  source_blockcount,
-                                 checksum_type_number)
+                                 hash_alg_number)
     header_payload += source_checksum
     source_checksum_padding = b"\0" * (64 - len(source_checksum))
     header_payload += source_checksum_padding
@@ -609,14 +615,14 @@ def diff(args, parser):
     target = args.target
     patch = args.patch  # FIXME rename, because it has the same name as the function
     blocksize = args.blocksize
-    checksum_type = args.checksum_type
+    hash_alg = args.hash_alg
     quiet = args.quiet
 
-    # Sanitize checksum_type value from user
-    checksum_type = checksum_type.upper()
-    if checksum_type not in __checksum_types__.keys():
-        print("ERROR: Value '%s' is not a valid checksum type!" %
-              (checksum_type,),
+    # Sanitize hash_alg value from user
+    hash_alg = hash_alg.upper()
+    if hash_alg not in __hash_algs__.keys():
+        print("ERROR: Value '%s' is not a valid hash algorithm!" %
+              (hash_alg,),
               file=sys.stderr)
         return 64   # EX_USAGE. See /usr/include/sysexits.h
 
@@ -634,14 +640,14 @@ def diff(args, parser):
 
     # Phase One: Read source file and generate checksum hashtable
     try:
-        source_hashtable, source_blockcount, source_checksum = readSource(source, blocksize, checksum_type, stdoutAllowed=stdoutAllowed)
+        source_hashtable, source_blockcount, source_checksum = readSource(source, blocksize, hash_alg, stdoutAllowed=stdoutAllowed)
     except AligmentError as e:
         print("ERROR:", e, file=sys.stderr)
         return 1
 
     if stdoutAllowed:
         print("%s checksum of source file: %s" %
-              (checksum_type, toHex(source_checksum)))
+              (hash_alg, toHex(source_checksum)))
 
     # Phase Two: Generate and write patch
     if target != "-":
@@ -658,7 +664,7 @@ def diff(args, parser):
 
     # Start writing patch file
     with open(source, "br") as source_fd:
-        entry_stream = readTargetAndGenPatchCommands(blocksize, checksum_type, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=stdoutAllowed)
+        entry_stream = readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=stdoutAllowed)
 
         # File `source` still needs to be opened while generating the patch
         # file. Some blocks are reread.
@@ -734,8 +740,8 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
 
     patch_file_version = header_payload[0]   # :: int
     if patch_file_version != __FILE_FORMAT_VERSION__:
-        raise UnsupportedFileVersion("Unsupported file format version '%d'. Only file version '1' is supported!" %
-                                     (patch_file_version,))
+        raise UnsupportedFileVersion("Unsupported file format version '%d'. Only file version '%d' is supported!" %
+                                     (patch_file_version, __FILE_FORMAT_VERSION__))
 
     # After checking the patch file format version, check the length to match
     # format expectation.
@@ -749,26 +755,26 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
     # Ignore the file version number here, because it's already checked above.
     blocksize = x[1]
     source_blockcount = x[2]
-    checksum_type_number = x[3]
+    hash_alg_number = x[3]
 
-    if checksum_type_number not in __checksum_types__.values():
+    if hash_alg_number not in __hash_algs__.values():
         raise FileFormatError("tbd")
     else:
         # HACKY
-        checksum_type = None
-        for key, value in __checksum_types__.items():
-            if value == checksum_type_number:
-                checksum_type = key
-        assert checksum_type in __checksum_lengths__
+        hash_alg = None
+        for key, value in __hash_algs__.items():
+            if value == hash_alg_number:
+                hash_alg = key
+        assert hash_alg in __digest_lenghts__
 
-    checksum_length = __checksum_lengths__[checksum_type]
-    source_checksum = header_payload_checksum[:checksum_length]
+    digest_length = __digest_lenghts__[hash_alg]
+    source_checksum = header_payload_checksum[:digest_length]
 
-    source_checksum_padding = header_payload_checksum[checksum_length:]
+    source_checksum_padding = header_payload_checksum[digest_length:]
     if not all(i == 0 for i in source_checksum_padding):
         raise FileFormatError("Source checksums padding is not zero: %s!" % (source_checksum_padding,))
 
-    yield Header(blocksize, source_blockcount, checksum_type, source_checksum)
+    yield Header(blocksize, source_blockcount, hash_alg, source_checksum)
 
     if skip_command_entries is False:
         commands_crc32 = 0  # Initial value for CRC32
@@ -873,11 +879,11 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
     if len(footer_payload) != __FILE_FOOTER_PAYLOAD_LENGTH__:
         raise FileFormatError("Footer payload must be %d bytes long!" % (__FILE_FOOTER_PAYLOAD_LENGTH__,))
 
-    checksum_length = __checksum_lengths__[checksum_type]
+    digest_length = __digest_lenghts__[hash_alg]
 
     target_blockcount_in_file, commands_crc32_in_file = struct.unpack("<II", footer_payload[:8])
-    target_checksum = footer_payload[8:8 + checksum_length]
-    target_checksum_padding = footer_payload[8 + checksum_length:]
+    target_checksum = footer_payload[8:8 + digest_length]
+    target_checksum_padding = footer_payload[8 + digest_length:]
 
     if not all(i == 0 for i in target_checksum_padding):
         raise FileFormatError("Target checkums padding is not zero: %s!" % (target_checksum_padding,))
@@ -932,9 +938,9 @@ def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
     assert isinstance(header, Header)
     blocksize = header.getBlocksize()
     source_blockcount = header.getSourceBlockCount()
-    checksum_type = header.getChecksumType()
+    hash_alg = header.getHashAlgorithm()
 
-    target_checksum_m = getChecksumGenerator(checksum_type)
+    target_checksum_m = getChecksumGenerator(hash_alg)
 
     block_zero = b"\0" * blocksize
     assert len(block_zero) == blocksize
@@ -997,9 +1003,9 @@ def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
 
     if target_checksum != footer.getTargetChecksum():
         print("ERROR: Checksum of generated target file (%s: %s) does not match the original checksum of the target file (%s: %s)!" %
-              (checksum_type,
+              (hash_alg,
                toHex(target_checksum),
-               checksum_type,
+               hash_alg,
                toHex(footer.getTargetChecksum())),
               file=sys.stderr)
         ret = __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__
@@ -1008,7 +1014,7 @@ def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
 
     if stdoutAllowed and sys.stdout.isatty():
         print("%s Checksum of target file: %s" %
-              (checksum_type, toHex(target_checksum)))
+              (hash_alg, toHex(target_checksum)))
 
     return ret
 
@@ -1077,7 +1083,7 @@ def printInfo(patch_fd, skip_command_entries=False):
     assert isinstance(header, Header)
     blocksize = header.getBlocksize()
     source_blockcount = header.getSourceBlockCount()
-    checksum_type = header.getChecksumType()
+    hash_alg = header.getHashAlgorithm()
     source_checksum = header.getSourceChecksum()
 
     if not skip_command_entries:
@@ -1130,7 +1136,7 @@ def printInfo(patch_fd, skip_command_entries=False):
 
     print("blocksize", blocksize, "B"),
     print("source-blocks %6i" % (source_blockcount,))
-    print("checksum-type", checksum_type)
+    print("hash-algorithm", hash_alg)
     print("source-checksum", toHex(source_checksum))
     print("target-blocks %6i" % (target_blockcount,))
 
@@ -1330,9 +1336,9 @@ Homepage: https://www.stefanchrist.eu/projects/blockdiff
     parser_diff.add_argument("-b", "--blocksize", dest="blocksize", type=int,
                              default=4 * 1024,
                              help="blocksize in bytes (default: 4096 B = 4 KiB)")
-    parser_diff.add_argument("-c", "--checksum-type", dest="checksum_type", type=str,
+    parser_diff.add_argument("-a", "--hash-alg", dest="hash_alg", type=str,
                              default="SHA1",
-                             help="checksum algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
+                             help="hash algorithm (default: 'SHA1', values: 'MD5', 'SHA1', 'SHA256', 'SHA512')")
     parser_diff.add_argument("-q", "--quiet", dest="quiet", action='store_true',
                              default=False,
                              help="don't print verbose output on stdout")

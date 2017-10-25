@@ -11,7 +11,7 @@ blockdiff - block based binary patch tool
 SYNOPSIS
 ========
 
-    blockdiff diff [-b/--blocksize=<uint>] [-c/--checksum-type=<name>] [-q/--quiet] <source> <target> <patch>
+    blockdiff diff [-b/--blocksize=<uint>] [-a/--hash-alg=<name>] [-q/--quiet] <source> <target> <patch>
     blockdiff patch [-q/--quiet] <source> <patch> <target>
     blockdiff info [--fast] <patch>
     blockdiff extinfo <filepath>
@@ -45,7 +45,7 @@ source/target file/disk format. For ext2,3,4 disk images the default blocksize
 command `blockdiff extinfo` or the program `dumpe2fs`. You can also experiment
 with smaller blocksizes to reduce the patch file size further.
 
-You can specify the checksum algorithm with argument `--checksum-type` (default
+You can specify the checksum algorithm with argument `--hash-alg` (default
 `SHA1`) which is stored in the patch file. It's used to verify the target file
 while writing the target file in the patch operation.
 

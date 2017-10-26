@@ -123,7 +123,7 @@ class TestReadSource(TestCaseTempFolder):
         with open(source_filepath, "bw") as f:
             f.write(source)
 
-        x = readSource(source_filepath, 2, "MD5", stdoutAllowed=False)
+        x = readSource(source_filepath, 2, "MD5", quiet=True)
         source_hashtable, source_blockcount, source_checksum = x
 
         # NOTE: Only a maximum of three block indices are saved in the
@@ -191,7 +191,7 @@ class TestWritePatch(unittest.TestCase):
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch_generated = patch_fd.getBuffer()
 
         # The binary format of the patch looks like
@@ -233,7 +233,7 @@ class TestWritePatch(unittest.TestCase):
                         ('s',),
                         Footer(b"B" * 64)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch_generated = patch_fd.getBuffer()
 
         # The binary format of the patch looks like
@@ -522,7 +522,7 @@ class TestReadPatch(unittest.TestCase):
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Avoid invalidating the first 4 bytes of the patch file. It's the
@@ -555,7 +555,7 @@ class TestReadPatch(unittest.TestCase):
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         for i in range(len(patch)):
@@ -573,7 +573,7 @@ class TestReadPatch(unittest.TestCase):
                         Footer(b"B" * 20)]
 
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Add some additional bytes at the end of the binary patch
@@ -639,7 +639,7 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         with open(join(dir, "patch"), "bw") as f:
@@ -671,7 +671,7 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha256(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         with open(join(dir, "patch"), "bw") as f:
@@ -701,7 +701,7 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
@@ -725,7 +725,7 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Before executing `blockdiff` the target file does not exists.
@@ -752,12 +752,12 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(b"\0" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Execute `blockdiff` with source and patch file. Checksum in footer
         # <b"\0" * 20> does not match the target file.
-        p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"],
                   stdout=PIPE, stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
         # Special exit code __EXIT_CODE_TARGET_CHECKSUM_MISMATCH__:
@@ -779,7 +779,7 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Invalidate header CRC32 checksum to force a DataCorruption exception.
@@ -787,7 +787,7 @@ class TestPatch(TestCaseTempFolder):
         patch[20] = 0xff
 
         # Execute `blockdiff` with corrupted patch file.
-        p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"],
                   stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
         # Special exit code __EXIT_CODE_PATCH_FILE_DATA_CORRUPTION__:
@@ -814,11 +814,11 @@ class TestPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Execute `blockdiff` with source and patch file.
-        p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"],
                   stdout=PIPE, stdin=PIPE, stderr=PIPE, cwd=dir)
         stdout, stderr = p.communicate(patch)
         # Special exit code __EXIT_CODE_SOURCE_FILE_DATA_CORRUPTION__:
@@ -838,7 +838,7 @@ class TestPatch(TestCaseTempFolder):
         with open(join(dir, "source"), "bw") as f:
             f.write(b"")
 
-        p = Popen([BLOCKDIFF, "patch", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "patch", "-q", "source", "-", "-"],
                   stdin=PIPE, stderr=PIPE, cwd=dir)
         _, stderr = p.communicate(patch)
 
@@ -869,7 +869,7 @@ class TestInfo(TestCaseTempFolder):
                         ('s',),
                         Footer(b"\0" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Feed patch file into `blockdiff info`
@@ -906,7 +906,7 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
                         ('s',),
                         Footer(b"\0" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Create patch file on filesystem. For "--fast" patch file must be
@@ -942,7 +942,7 @@ Saving -173 B (-2162.50 %) compared to sending the target file.
                         ('s',),
                         Footer(b"\x02" * 64)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Feed patch file into `blockdiff info`
@@ -974,7 +974,7 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
                         ('s',),
                         Footer(b"\0" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Feed patch file into `blockdiff info`
@@ -1008,7 +1008,7 @@ Saving -177 B (-4425.00 %) compared to sending the target file.
             entry_stream = [Header(2, 3, "SHA1", b"\0" * 20),
                             ('s',),
                             Footer(b"\0" * 20)]
-            writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+            writePatch(iter(entry_stream), patch_fd)
 
         self.assertEqual(os.stat(patch_filepath).st_size, 177)
 
@@ -1040,7 +1040,7 @@ Target file is 0 bytes in size. Not saving anything.
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Invalidate header CRC32 checksum to force a DataCorruption exception.
@@ -1063,7 +1063,7 @@ Target file is 0 bytes in size. Not saving anything.
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Add additional bytes at end of patch
@@ -1085,7 +1085,7 @@ Target file is 0 bytes in size. Not saving anything.
                         ('s',),
                         Footer(b"B" * 20)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         # Execute `blockdiff` and pass patch via stdin pipe. This makes it not
@@ -1140,7 +1140,7 @@ class TestDiffAndPatch(TestCaseTempFolder):
                         ('s',),
                         Footer(target_checksum)]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         with open(join(dir, "patch"), "br") as f:
@@ -1180,7 +1180,7 @@ class TestDiff(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         self.assertEqual(stdout, patch)
@@ -1206,7 +1206,7 @@ class TestDiff(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         self.assertEqual(stdout, patch)
@@ -1233,7 +1233,7 @@ class TestDiff(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         self.assertEqual(stdout, patch)
@@ -1259,7 +1259,7 @@ class TestDiff(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha1(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         self.assertEqual(stdout, patch)
@@ -1309,7 +1309,7 @@ class TestDiff(TestCaseTempFolder):
                         ('s',),
                         Footer(hashlib.sha512(target).digest())]
         patch_fd = BytesStreamWriter()
-        writePatch(iter(entry_stream), patch_fd, stdoutAllowed=False)
+        writePatch(iter(entry_stream), patch_fd)
         patch = patch_fd.getBuffer()
 
         self.assertEqual(stdout, patch)

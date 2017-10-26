@@ -217,7 +217,7 @@ class AligmentError(Exception):
     pass
 
 
-def readSource(filename, blocksize, hash_alg, stdoutAllowed=False):
+def readSource(filename, blocksize, hash_alg, quiet=True):
     block_zero = bytes([0] * blocksize)
     assert len(block_zero) == blocksize
 
@@ -226,8 +226,8 @@ def readSource(filename, blocksize, hash_alg, stdoutAllowed=False):
 
     source_hashtable = {}
 
-    if stdoutAllowed and sys.stdout.isatty():
-        print("Reading source '%s':" % (filename,))
+    if not quiet:
+        print("Reading source '%s':" % (filename,), file=sys.stderr)
 
     # Using 's.stat(filename).st_size' does not work for block devices.
     with open(filename, "br") as f:
@@ -281,7 +281,8 @@ def readSource(filename, blocksize, hash_alg, stdoutAllowed=False):
                     source_block_crc32 = binascii.crc32(block)
                     source_hashtable[block_md5sum] = ([i], source_block_crc32)
 
-            if stdoutAllowed and sys.stdout.isatty():
+            # Only show progress bar when stderr is a tty.
+            if not quiet and sys.stderr.isatty():
                 LENGHT = 50
                 # Using (i + 1), so the last iteration is 100%.
                 percent = (100 * blocksize * (i + 1)) // source_filesize
@@ -291,13 +292,14 @@ def readSource(filename, blocksize, hash_alg, stdoutAllowed=False):
                 # stdout every iteration slows done the program by a couple of
                 # seconds.
                 if percent != percent_lasttime:
-                    print("|" + "-" * (percent // 2) + " " * (LENGHT - percent // 2) + "| (%3d %%)\r" % (percent,), end="")
+                    print("|" + "-" * (percent // 2) + " " * (LENGHT - percent // 2) + "| (%3d %%)\r" % (percent,),
+                            end="", file=sys.stderr)
                     percent_lasttime = percent
 
         source_blockcount = i
 
-    if stdoutAllowed and sys.stdout.isatty():
-        print()
+    if not quiet and sys.stderr.isatty():
+        print("", file=sys.stderr)
 
     source_checksum = source_checksum_m.digest()
 
@@ -319,7 +321,7 @@ def getChecksumGenerator(hash_alg):
     return checksum_m
 
 
-def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=False):
+def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, quiet=True):
     """ returns a entry generator object. First, last element and the element
         before the last element are special:
            [Header, command(type=!stop)*, command(type=stop), Footer]
@@ -340,8 +342,10 @@ def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtab
 
     yield Header(blocksize, source_blockcount, hash_alg, source_checksum)
 
-    if stdoutAllowed and sys.stdout.isatty():
-        print("Reading target '%s' and writing patch. Block statistics:" % (target,))
+    if not quiet:
+        print("Reading target '%s' and writing patch. Block statistics:" %
+              (target,),
+              file=sys.stderr)
 
     def printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new):
         # NOTE: Percentage values and output format should be the nearly
@@ -351,7 +355,8 @@ def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtab
                blocks_ones, blocks_ones * 100 / blocks_count,
                blocks_copy, blocks_copy * 100 / blocks_count,
                blocks_new, blocks_new * 100 / blocks_count),
-              end="")
+              end="",
+              file=sys.stderr)
 
     for i in count():
         # FIXME Add code to read exactly a byte buffer of size 'blocksize'. Not
@@ -391,8 +396,9 @@ def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtab
 
         blocks_count = i + 1
 
-        if stdoutAllowed and sys.stdout.isatty():
-            # Update the statistic every 1000 iteration to avoid stdout write
+        # Only update states when stderr is a tty.
+        if not quiet and sys.stderr.isatty():
+            # Update the statistic every 1000 iteration to avoid stderr write
             # calls.  A 2 GiB ext4 disk images has 524288 blocks by a blocksize
             # of 4KiB, so there are 524 statistic updates while reading the
             # target file.
@@ -400,19 +406,22 @@ def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtab
                 printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new)
 
     # After the loop print the statistics a last time, because the loop does
-    # not update the statistic every iteration.
-    if stdoutAllowed and sys.stdout.isatty():
+    # not update the statistic every iteration. Also update the stats when
+    # stderr is not a tty. This way it appears in a log file.
+    if not quiet:
         if blocks_count >= 1:
             printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new)
-            print()  # Print a newline character, because printStat() does not do it.
+            # Print a newline character, because printStat() does not do it.
+            print("", file=sys.stderr)
 
     yield ("s",)  # Emit command(type=stop)
 
     target_checksum = target_checksum_m.digest()
 
-    if stdoutAllowed and sys.stdout.isatty():
+    if not quiet:
         print("%s checksum of target file: %s" %
-              (hash_alg, toHex(target_checksum)))
+              (hash_alg, toHex(target_checksum)),
+              file=sys.stderr)
 
     yield Footer(target_checksum)
 
@@ -517,7 +526,7 @@ class Footer():
 #          For SHA512 the full 64 bytes are used.
 #       (This is located at the end of the file. This way the patch-file must
 #       only be traversed once. No seeking to the start of the file required)
-def writePatch(entry_stream, patch_fd, stdoutAllowed=False):
+def writePatch(entry_stream, patch_fd):
     """Consumes a patch entry generator, encodes it and writes it to the
        patchfile.
     """
@@ -626,28 +635,17 @@ def diff(args, parser):
               file=sys.stderr)
         return 64   # EX_USAGE. See /usr/include/sysexits.h
 
-    if quiet:
-        stdoutAllowed = False
-    else:
-        # If patch is written to stdout the functions readSource and
-        # readTargetAndGenPatchCommands should not make stdout output.
-        if patch == "-":
-            # The program writes the patch to stdout. Every other output to stdout
-            # must be avoided.
-            stdoutAllowed = False
-        else:
-            stdoutAllowed = True
-
     # Phase One: Read source file and generate checksum hashtable
     try:
-        source_hashtable, source_blockcount, source_checksum = readSource(source, blocksize, hash_alg, stdoutAllowed=stdoutAllowed)
+        source_hashtable, source_blockcount, source_checksum = readSource(source, blocksize, hash_alg, quiet=quiet)
     except AligmentError as e:
         print("ERROR:", e, file=sys.stderr)
         return 1
 
-    if stdoutAllowed:
+    if not quiet:
         print("%s checksum of source file: %s" %
-              (hash_alg, toHex(source_checksum)))
+              (hash_alg, toHex(source_checksum)),
+              file=sys.stderr)
 
     # Phase Two: Generate and write patch
     if target != "-":
@@ -664,11 +662,11 @@ def diff(args, parser):
 
     # Start writing patch file
     with open(source, "br") as source_fd:
-        entry_stream = readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, stdoutAllowed=stdoutAllowed)
+        entry_stream = readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtable, source_blockcount, source_checksum, target, target_fd, quiet=quiet)
 
         # File `source` still needs to be opened while generating the patch
         # file. Some blocks are reread.
-        writePatch(entry_stream, patch_fd, stdoutAllowed=stdoutAllowed)
+        writePatch(entry_stream, patch_fd)
 
     if target != "-":
         target_fd.close()
@@ -931,7 +929,7 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
     yield Footer(target_checksum)
 
 
-def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
+def applyPatch(source_fd, patch_fd, target_fd, quiet=True):
     entry_stream = readPatch(patch_fd)
 
     header = next(entry_stream)
@@ -1012,9 +1010,10 @@ def applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=False):
     else:
         ret = 0
 
-    if stdoutAllowed and sys.stdout.isatty():
+    if not quiet:
         print("%s Checksum of target file: %s" %
-              (hash_alg, toHex(target_checksum)))
+              (hash_alg, toHex(target_checksum)),
+              file=sys.stderr)
 
     return ret
 
@@ -1024,14 +1023,6 @@ def patch(args, parser):
     patch = args.patch  # FIXME rename, because it has the same name as the function
     target = args.target
     quiet = args.quiet
-
-    if quiet:
-        stdoutAllowed = False
-    else:
-        if patch != '-':
-            stdoutAllowed = True
-        else:
-            stdoutAllowed = False
 
     if patch != "-":
         patch_fd = open(patch, "br")
@@ -1043,13 +1034,13 @@ def patch(args, parser):
     else:
         target_fd = sys.stdout.buffer
 
-    if stdoutAllowed and sys.stdout.isatty():
-        print("Writing target '%s':" % (target,))
+    if not quiet:
+        print("Writing target '%s':" % (target,), file=sys.stderr)
 
     # Source opened and must be seekable, but maybe not used at all.
     try:
         with open(source, "br") as source_fd:
-            ret = applyPatch(source_fd, patch_fd, target_fd, stdoutAllowed=stdoutAllowed)
+            ret = applyPatch(source_fd, patch_fd, target_fd, quiet=quiet)
     except InvalidMagic as e:
         print("ERROR: File `%s` is not a valid patch file: %s"
               % (patch, e),

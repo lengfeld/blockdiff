@@ -126,7 +126,7 @@ def readContainer(fd, magic):
     assert 0 <= length_payload < 2**32
     # if length_payload:
     #     raise Exception("here")
-    # Add upper bound check
+    # FIXME Add upper bound check
 
     # Read payload
     payload = fd.read(length_payload)
@@ -897,9 +897,9 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
                                   commands_crc32_in_file,
                                   struct.pack("<I", commands_crc32_in_file)))
 
-        # Verify redundant information: Compare the count of
-        # commands(type=!stop) in the patch file with the stored 'target block
-        # count' in the footer structure.
+        # Verify redundant information: Compare the count of commands - without
+        # the command(type=stop) - in the patch file with the stored 'target
+        # block count' in the footer structure.
         if target_blockcount_in_file != target_blockcount_from_commands:
             # Note: Using the exception DataCorruption would be wrong here. If
             # the block count in the footer structure is wrong, it cannot be

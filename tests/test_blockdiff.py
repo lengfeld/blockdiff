@@ -1167,7 +1167,7 @@ class TestDiff(TestCaseTempFolder):
         with open(join(dir, "target"), "bw") as f:
             f.write(target)
 
-        p = Popen([BLOCKDIFF, "diff", "--blocksize=2", "source", "target", "-"], stdout=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "diff", "-q", "--blocksize=2", "source", "target", "-"], stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate()
         self.assertEqual(p.returncode, 0)
 
@@ -1196,7 +1196,7 @@ class TestDiff(TestCaseTempFolder):
         with open(join(dir, "target"), "bw") as f:
             f.write(target)
 
-        p = Popen([BLOCKDIFF, "diff", "--blocksize=2", "source", "target", "-"],
+        p = Popen([BLOCKDIFF, "diff", "-q", "--blocksize=2", "source", "target", "-"],
                   stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate()
         self.assertEqual(p.returncode, 0)
@@ -1221,7 +1221,7 @@ class TestDiff(TestCaseTempFolder):
 
         target = b"\0\0bbcc"
 
-        p = Popen([BLOCKDIFF, "diff", "--blocksize=2", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "diff", "-q", "--blocksize=2", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(target)
         self.assertEqual(p.returncode, 0)
 
@@ -1248,7 +1248,7 @@ class TestDiff(TestCaseTempFolder):
 
         target = b"\0\0aa"
 
-        p = Popen([BLOCKDIFF, "diff", "--blocksize=2", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
+        p = Popen([BLOCKDIFF, "diff", "-q", "--blocksize=2", "source", "-", "-"], stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(target)
         self.assertEqual(p.returncode, 0)
 
@@ -1297,7 +1297,7 @@ class TestDiff(TestCaseTempFolder):
         target = b"aabb"
 
         # Check also short options '-b' and '-a' here.
-        p = Popen([BLOCKDIFF, "diff", "-b", "2", "-a", "SHA512", "source", "-", "-"],
+        p = Popen([BLOCKDIFF, "diff", "-q", "-b", "2", "-a", "SHA512", "source", "-", "-"],
                   stdin=PIPE, stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate(target)
         self.assertEqual(p.returncode, 0)

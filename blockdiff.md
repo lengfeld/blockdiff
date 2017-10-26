@@ -134,10 +134,16 @@ The patch file format is streamable and the commands `blockdiff diff` and
 file from stdin. The following example use that feature over SSH.
 
     $ blockdiff diff --blocksize 512 old-file new-file - | \
-	ssh server "blockdiff patch old-file - output-file"
+	ssh server "blockdiff patch /path/to/old-file - output-file"
 
 In the above command the patch file is never written to the disk. It's directly
 streamed over the network.
+
+Don't forget to use additional compression. `blockdiff` does not compress the
+data internally. An example with `gzip` compression:
+
+    $ blockdiff diff --blocksize 512 old-file new-file -  | gzip | \
+	ssh server "gunzip | blockdiff patch /path/to/old-file - output-file"
 
 
 ## A/B Update scheme on block devices

@@ -35,11 +35,11 @@ BLOCKDIFF = join(dirname(path), "..", "blockdiff")
 
 
 from blockdiff import (readPatch, EarlyEOFReached, readContainer,
-                       NonZeroPadding, InvalidCRC, InvalidMagic,
+                       NonZeroPadding, DataCorruption, InvalidMagic,
                        packContainer, readTargetAndGenPatchCommands, Header,
                        Footer, __FILE_MAGIC_FOOTER__, writePatch,
-                       FileFormatError, parseExtSuperblock, DataCorruption,
-                       readSource, UnsupportedFileVersion, NotSeekable)
+                       FileFormatError, parseExtSuperblock, readSource,
+                       UnsupportedFileVersion, NotSeekable)
 
 
 class TestReadContainer(unittest.TestCase):
@@ -73,13 +73,13 @@ class TestReadContainer(unittest.TestCase):
         self.assertEqual(payload, b"123456789012")
         self.assertEqual(bytes_read, 24)
 
-    def testInvalidCRC(self):
+    def testDataCorruption(self):
         __MAGIC__ = b"BDIF"
-        # Note: The InvalidCRC execption is raised, before the zero padding is
-        # checked. So hence the following container as a non-zero padding, the
-        # first failure mode is the invalid CRC32.
+        # Note: The DataCorruption exception is raised, before the zero padding
+        # is checked. So hence the following container as a non-zero padding,
+        # the first failure mode is the invalid CRC32 checksum.
         fd = BytesStreamReader(__MAGIC__ + b"\x01\x00\x00\x00" + b"\x42" + b"\0\xff\0" + b"\xff\xff\xff\xff")
-        self.assertRaises(InvalidCRC, readContainer, fd, __MAGIC__)
+        self.assertRaises(DataCorruption, readContainer, fd, __MAGIC__)
 
     def testInvalidMagic(self):
         __MAGIC__ = b"BDIF"

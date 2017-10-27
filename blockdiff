@@ -72,9 +72,7 @@ class NonZeroPadding(Exception):
     pass
 
 
-# Rename into MismatchCRC or Datacorruption.  The CRC32 is not invalid. Some
-# bytes are corrupted in container.
-class InvalidCRC(Exception):
+class DataCorruption(Exception):
     pass
 
 
@@ -168,11 +166,11 @@ def readContainer(fd, magic):
     assert 0 <= crc32 < 2**32
 
     if crc32 != crc32_in_file:
-        raise InvalidCRC("Expected CRC32 %d (bytes %s). Computed CRC32 %d (bytes %s)!" %
-                         (crc32_in_file,
-                          struct.pack("<I", crc32_in_file),
-                          crc32,
-                          struct.pack("<I", crc32)))
+        raise DataCorruption("Expected CRC32 %d (bytes %s). Computed CRC32 %d (bytes %s)!" %
+                             (crc32_in_file,
+                              struct.pack("<I", crc32_in_file),
+                              crc32,
+                              struct.pack("<I", crc32)))
 
     # The padding bytes are checked after the CRC32 of the whole container is
     # checked.
@@ -294,7 +292,8 @@ def readSource(filename, blocksize, hash_alg, quiet=True):
                 # seconds.
                 if percent != percent_lasttime:
                     print("|" + "-" * (percent // 2) + " " * (LENGHT - percent // 2) + "| (%3d %%)\r" % (percent,),
-                            end="", file=sys.stderr)
+                          end="",
+                          file=sys.stderr)
                     percent_lasttime = percent
 
         source_blockcount = i
@@ -711,10 +710,6 @@ class FileFormatError(Exception):
     pass
 
 
-class DataCorruption(Exception):
-    pass
-
-
 class NotSeekable(Exception):
     pass
 
@@ -756,7 +751,7 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
     try:
         header_payload, bytes_read = readContainer(patch_fd, __FILE_MAGIC_HEADER__)
         patch_bytes_read += bytes_read
-    except InvalidCRC as e:
+    except DataCorruption as e:
         raise DataCorruption("Invalid CRC32 in header: %s" % (e,))
 
     if not len(header_payload) >= 1:
@@ -897,7 +892,7 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
         # footer structure is just a normal data corruption error in the file.
         # FIXME add read and expected bytes in message
         raise DataCorruption("Invalid magic number in footer. Corrupted file?")
-    except InvalidCRC as e:
+    except DataCorruption as e:
         raise DataCorruption("Invalid CRC32 in footer: %s" % (e,))
 
     if len(footer_payload) != __FILE_FOOTER_PAYLOAD_LENGTH__:

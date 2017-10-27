@@ -52,8 +52,11 @@ Features:
   patch file, you can also not trust the cryptographic checksum in the patch
   file. The final target file must be verified another external tool.
 * Special cases, source or target file has zero length, are handled.
-* Using the wrong source file in `blockdiff patch` is handled gracefully. Every
-  source block is checked by CRC32. This catches simple human errors.
+* Using the wrong source file/device in `blockdiff patch` is handled
+  gracefully. Every source block is checked by CRC32. This catches simple human
+  errors.
+* Using a block device as the source file and target file in `blockdiff patch`
+  is supported.  You can write the produced disk image directly to the device.
 
 
 Limitations (Or *Keep in mind*):

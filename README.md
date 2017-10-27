@@ -155,15 +155,17 @@ Goals:
 
 Contents/entries:
 
-    [header, command(type=!stop)*, command(type=stop), footer]
+    [header(magic="BDIF"), command(type=!stop)*, command(type=stop), footer(magic="BDIE")]
 
-Supported commands:
+Command entries:
 
 * 0x00: command(type=stop): end of commands
 * 0x01: command(type=ones): write ones block
 * 0x02: command(type=zero): write zero block
 * 0x03: command(type=copy): copy block from source file
 * 0x04: command(type=new): write new block with contents from patch file
+
+For more details see function `writePatch`.
 
 
 Todos
@@ -223,3 +225,6 @@ installed on the build system.
 Add argument "auto" for option "--blocksize" in command 'blockdiff diff'. The
 program should try to detect the suitable blocksize from the file, e.g. header
 of ext2,3,4 images or perdefined for tar.
+
+Add some sort or progress stderr output in 'blockdiff patch'. Currently there
+is no indication that the patch operation is running.

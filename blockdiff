@@ -34,6 +34,7 @@ __VERSION__ = "0.1.y"
 __FILE_MAGIC_HEADER__ = b"BDIF"
 __FILE_MAGIC_FOOTER__ = b"BDIE"
 __FILE_FORMAT_VERSION__ = 1
+__FILE_HEADER_PAYLOAD_LENGTH__ = 74
 __FILE_FOOTER_PAYLOAD_LENGTH__ = 72
 
 
@@ -498,37 +499,62 @@ class Footer():
         return "Footer(%s)" % (self._target_checksum,)
 
 
-# Format (maybe outdated, not precise):
-#
-#  Header:
-#    - u8 version (1: standard)
-#    - u8 hash algorithm (see above)
-#    - u32le blocksize
-#    - u32le source block count (not all inputs are really required)
-#    # Putting the target block count in the header is impossible, because
-#    # the 'target' file in the command 'patch' can be a stream.
-#    - u8[64] checksum[T] of source file
-#          For MD5 only the first 16 bytes are used. The rest is set to zero.
-#          For SHA512 the full 64 bytes are used.
-#  commands:
-#    - u8 type (0: stop, 1: ones, 2: zero, 3: copy, 4: new)
-#       - plus payload
-#  Footer:
-#    - u32le target block count
-#       Infact this is redundant information. In the patch file format the
-#       count of command entries (without the special entry(type=stop) is equal
-#       to the target block count. But storing the target block count
-#       information in the footer explicitly, allows 'blockdiff info --fast' to
-#       print more information without traverse the whole patch file.
-#    - u32le CRC32 of command entries
-#    - u8[64] checksum[T] of target file
-#          For MD5 only the first 16 bytes are used. The rest is set to zero.
-#          For SHA512 the full 64 bytes are used.
-#       (This is located at the end of the file. This way the patch-file must
-#       only be traversed once. No seeking to the start of the file required)
 def writePatch(entry_stream, patch_fd):
-    """Consumes a patch entry generator, encodes it and writes it to the
-       patchfile.
+    """
+    Consumes an entry generator object (e.g. by function
+    readTargetAndGenPatchCommands()), encodes it, add writes it to the patch
+    file in <patch_fd>.
+
+    The binary patch format consists of different types of entries placed into
+    the file behind each other:
+
+         [header(magic=BDIF), command(type=!stop)*, command(type=stop), footer(magic=BDIE)]
+
+    Every entry exists exactly once except the entries command(type=!stop). For
+    every block in the target file there is an entry containing the patch
+    instruction. Whether it should be copied from the source file, written from
+    patch payload or is a full zero or one block.
+
+    The internal fields of header, command and footer are described here:
+
+    Header (wrapped in a container, magic='BDIF'):
+      - u8 version (1: standard)
+      - u8 hash algorithm (see above)
+      - u32le blocksize
+      - u32le source block count (not all inputs are really required)
+           Putting the target block count in the header is impossible, because
+           the 'target' file in the command 'patch' is written as a stream.
+      - u8[64] checksum of source file by hash algorithm
+            For MD5 only the first 16 bytes are used. The rest is set to zero.
+            ...
+            For SHA512 the full 64 bytes are used.
+
+    Commands:
+      - u8 type (0: stop, 1: ones, 2: zero, 3: copy, 4: new)
+      payload:
+         for 0=stop: no payload
+         for 1=ones: no payload
+         for 2=zero: no payload
+         for 3=copy:
+             - u32le CRC32 of source block
+             - u32le source block index
+         for 4=new:
+             - u8[<BLOCKSIZE>] bytes of target block
+
+    Footer (wrapped in a container, magic='BDIE'):
+      - u32le target block count
+         Infact this is redundant information. In the patch file format the
+         count of command entries (without the special entry(type=stop) is equal
+         to the target block count. But storing the target block count
+         information in the footer explicitly, allows 'blockdiff info --fast' to
+         print more information without traverse the whole patch file.
+      - u32le CRC32 of command entries
+      - u8[64] checksum[T] of target file
+            For MD5 only the first 16 bytes are used. The rest is set to zero.
+            ....
+            For SHA512 the full 64 bytes are used.
+         (This is located at the end of the file. This way the patch-file must
+         only be traversed once. No seeking to the start of the file required)
     """
 
     header = next(entry_stream)
@@ -556,7 +582,7 @@ def writePatch(entry_stream, patch_fd):
     header_payload += source_checksum_padding
 
     # Header payload is always 74 bytes long
-    assert len(header_payload) == 10 + 64
+    assert len(header_payload) == __FILE_HEADER_PAYLOAD_LENGTH__
 
     container_header = packContainer(__FILE_MAGIC_HEADER__, header_payload)
     patch_fd.write(container_header)
@@ -743,8 +769,8 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
 
     # After checking the patch file format version, check the length to match
     # format expectation.
-    if len(header_payload) != 10 + 64:
-        raise FileFormatError("Header payload must be 74 bytes long")
+    if len(header_payload) != __FILE_HEADER_PAYLOAD_LENGTH__:
+        raise FileFormatError("Header payload must be %d bytes long!" % (__FILE_HEADER_PAYLOAD_LENGTH__,))
 
     header_payload_fixed_entries = header_payload[:10]
     header_payload_checksum = header_payload[10:]

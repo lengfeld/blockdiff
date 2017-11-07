@@ -1342,7 +1342,7 @@ class TestStandardArguments(unittest.TestCase):
 
 
 class TestExtInfo(TestCaseTempFolder):
-    def _testExtInfo(self, ext_type, s_feature_compat, s_feature_incompat, dir):
+    def _testExtInfo(self, ext_type, feature_args, s_feature_compat, s_feature_incompat, dir):
         assert ext_type in ("ext2", "ext3", "ext4")
 
         # Blocksizes greater than 4096 are *evil*:
@@ -1360,9 +1360,13 @@ class TestExtInfo(TestCaseTempFolder):
 
             # Create ext filesystem
             # NOTE: Hardcoding path /sbin/mkfs.ext4, because on my debian
-            # system a normal user has the binary not in their 'mkfs.ext4'
-            # PATH.
-            p = Popen(["/sbin/mkfs.ext4", "-q", "-t", ext_type, "-b%d" % (blocksize,), "img"],
+            # system a normal user has the binary not in their PATH.
+            p = Popen(["/sbin/mkfs.ext4",
+                       "-q",
+                       "-t", ext_type,
+                       "-O", feature_args,
+                       "-b%d" % (blocksize,),
+                       "img"],
                       cwd=dir)
             p.communicate()
             self.assertEqual(p.returncode, 0)
@@ -1390,17 +1394,20 @@ class TestExtInfo(TestCaseTempFolder):
     def testExt2(self):
         dir = join(self.tmpdir, "testExt2")
         os.makedirs(dir, exist_ok=True)
-        self._testExtInfo("ext2", 56, 2, dir)
+        self._testExtInfo("ext2", "", 56, 2, dir)
 
     def testExt3(self):
         dir = join(self.tmpdir, "testExt3")
         os.makedirs(dir, exist_ok=True)
-        self._testExtInfo("ext3", 60, 2, dir)
+        self._testExtInfo("ext3", "", 60, 2, dir)
 
     def testExt4(self):
         dir = join(self.tmpdir, "testExt4")
         os.makedirs(dir, exist_ok=True)
-        self._testExtInfo("ext4", 60, 578, dir)
+        # Disable '64bit' explicitly, because it's enabled on my new gentoo
+        # system in '/etc/mke2fs.conf'. Maybe the code should use a fixed list
+        # of ext features, instead of relying on default settings in '/etc'.
+        self._testExtInfo("ext4", "^64bit", 60, 578, dir)
 
     def testMagicNotFound(self):
         dir = join(self.tmpdir, "testMagicNotFound")

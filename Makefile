@@ -20,12 +20,15 @@
 prefix = $(HOME)
 mandir ?= $(prefix)/share/man
 man1dir = $(mandir)/man1
-DESTDIR ?= ""
+DESTDIR ?=
 
 
-TARGETS = blockdiff.html blockdiff.1 README.html
+TARGETS = blockdiff blockdiff.html blockdiff.1 README.html
 
-all: $(TARGETS)               ### Generate documentation
+all: $(TARGETS)               ### Generate documentation and program
+
+blockdiff: src/blockdiff.py
+	cp $< $@
 
 %.html: %.md
 	pandoc -f markdown -t html -s --toc $< -o $@
@@ -35,7 +38,7 @@ all: $(TARGETS)               ### Generate documentation
 
 
 .PHONY: tests
-tests:                        ### Runs the python unit tests
+tests: blockdiff              ### Runs the python unit tests
 	python3 -m unittest discover -s tests
 
 
@@ -47,8 +50,8 @@ check:                        ### Runs the pep8 source code checker
 
 
 .PHONY: install
-install:                      ### Installs program to $(prefix)/
-	install -Dm 755 blockdiff.py $(DESTDIR)/$(prefix)/bin/blockdiff
+install: blockdiff            ### Installs program to $(prefix)/
+	install -Dm 755 blockdiff $(DESTDIR)/$(prefix)/bin/blockdiff
 
 .PHONY:
 install-doc: blockdiff.1

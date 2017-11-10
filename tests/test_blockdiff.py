@@ -27,7 +27,7 @@ from os.path import join, realpath, dirname
 from subprocess import Popen, PIPE
 
 path = realpath(__file__)
-sys.path.append(join(dirname(path), "../"))
+sys.path.append(join(dirname(path), "..", "src"))
 
 from helpers import TestCaseTempFolder, BytesStreamReader, BytesStreamWriter
 

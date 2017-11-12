@@ -188,7 +188,7 @@ def packContainer(magic, payload):
 
     length_payload = len(payload)
     if length_payload > (2**32 - 8 - 4):
-        raise ValueError("Playload is to long. %d bytes cannot be stored in the container format!" % (length_payload,))
+        raise ValueError("Payload is too long. %d bytes cannot be stored in the container format!" % (length_payload,))
 
     # Create length field as bytes
     length_payload_uint32le = struct.pack("<I", length_payload)
@@ -202,7 +202,7 @@ def packContainer(magic, payload):
     assert (length_payload + length_padding + 4) % 8 == 0
     padding = b"\0" * length_padding
 
-    # Calcualte CRC32 of magic, length, payload and padding
+    # Calculate CRC32 of magic, length, payload and padding
     magic_length_payload_padding = magic + length_payload_uint32le + payload + padding
     crc32 = binascii.crc32(magic_length_payload_padding)
     crc32_uint32le = struct.pack("<I", crc32)
@@ -274,24 +274,22 @@ def readSource(filename, blocksize, hash_alg, quiet=True):
                         pass
                     else:
                         block_indices.append(i)  # Updates list *in-place*
-
-                    # print(block_indices, "duplicate_block", file=sys.stderr)
                 except KeyError:
                     source_block_crc32 = binascii.crc32(block)
                     source_hashtable[block_md5sum] = ([i], source_block_crc32)
 
             # Only show progress bar when stderr is a tty.
             if not quiet and sys.stderr.isatty():
-                LENGHT = 50
+                LENGTH = 50
                 # Using (i + 1), so the last iteration is 100%.
                 percent = (100 * blocksize * (i + 1)) // source_filesize
 
-                # Speed optimiziation. Only update the statusbar when the
+                # Speed optimization. Only update the statusbar when the
                 # percent value has really hanged. Doing a write operation to
                 # stdout every iteration slows done the program by a couple of
                 # seconds.
                 if percent != percent_lasttime:
-                    print("|" + "-" * (percent // 2) + " " * (LENGHT - percent // 2) + "| (%3d %%)\r" % (percent,),
+                    print("|" + "-" * (percent // 2) + " " * (LENGTH - percent // 2) + "| (%3d %%)\r" % (percent,),
                           end="",
                           file=sys.stderr)
                     percent_lasttime = percent

@@ -142,7 +142,77 @@ calm down and only have to acknowledge the *GPLv2* license text.
 Algorithm
 ---------
 
-FIXME
+Compared to `bsdiff` the diff algorithm in `blockdiff` is braindead simple.
+It's the natural implementation that you would come up yourself if you
+restricted the binary diff algorithm to equally sized blocks and not bother
+with arbitrary byte movements of data. The presented algorithm works for
+blockbased file formats and filesystems that allows movement of data only at
+block length offsets.
+
+The diff algorithm defined in functions `readSource` and
+`readTargetAndGenPatchCommands` is based on the user defined blocksize argument
+in command `blockdiff patch`.
+
+The function `readSource` splits the source file into equally sized chunks
+(here named *blocks*) of *blocksize* bytes. This implies that the source file's
+length is a multiple of the *blocksize*.
+
+    Source file:
+    0                                                              EOF
+    |-- 0 --|-- 1 --|-- 2 --|-- 3 --|--    ...    --|-(n-1)-|-- n --|
+        |       |       |                               |       |
+        |       |       \- block 2                      |       |
+        |       \- block 1                 block (n-1) -/       |
+        \- block 0                        block n [last block] -/
+
+For each block in the source file a checksum is calculated. `blockdiff` uses
+MD5 internally. The block's checksums are used to build a big hashtable for the
+source file. The hashtable key is the checksum of a block and the hashtable's
+value is the block index. Since multiple blocks in the source file can be
+identical and map to the same checksum, multiple indices are saved as a list as
+the hashtable's value. The hashtable looks like:
+
+    hashtable = {checksum_a: [4, 3],
+                 checksum_b: [1],
+                 checksum_c: [0],
+                 checksum_d: [2, n, n-1],
+                 ...}
+
+As an optimization blocks of all zeros or ones bits are ignored and not saved
+in the hashtable. For filesystem zero blocks are quite common, because it's the
+default for non-used space.
+
+The hashtable makes it easy and fast to look up whether a given block can be
+found in the source file and get the index of it.
+
+
+After the hashtable of the source file is generated the target file is
+processed. The goal is to produce a sequence of commands, the patch file. The
+patch file can rebuild the target file, based on the available data in the
+source and patch file itself.
+
+The function `readTargetAndGenPatchCommands` splits the target file into
+equally sized blocks of *blocksize* bytes and processes one block at a time.
+The block's checksum is calculated and looked up in the hashtable of the source
+file. If the same block is available in the source file, it emits a
+'copy-from-block-index-n-in-source' command. If the block is not available in
+the source file, it emits and writes the whole target block content into the
+patch command. For all zero or ones blocks a special patch command is emitted.
+The sequence of patch commands may look like:
+
+    commands:
+      target block 0: copy from source file block 2
+      target block 1: copy from source file block (n-1)
+      target block 2: write block of all ones
+      target block 3: write block content b"a3f1deadbeaf..."
+      target block 4: write block of all zeros
+      ...
+      target block n: copy from source file block 0
+
+Apart from the sequence of patch commands the patch file formats contains an
+additional header and footer including extra information like the count of
+source and target blocks and extra checksums to verify the integrity of the
+generated target file in the command `blockdiff patch`.
 
 
 Patch File Format

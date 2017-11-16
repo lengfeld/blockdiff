@@ -31,8 +31,9 @@ Features and Limitations
 
 Features:
 
-* The operation `blockdiff diff` runs in *O(n + m)* time and memory usage is limited
-  by *O(n)* with *n := 'blocks in the source file'* and *m := 'blocks in the target file'*.
+* The operation `blockdiff diff` runs in *O(n + m)* time and memory usage is
+  limited by *O(n)* with *n := 'blocks in the source file'* and *m := 'blocks
+  in the target file'*.
 * The operation `blockdiff patch` runs in *O(m)* time and the memory usage is
   constant with *m := 'blocks in target file'*.
 * Patch file format is streamable. You can pipe out the patch file in
@@ -47,10 +48,11 @@ Features:
   file as it has existed while doing `blockdiff diff` on the sender machine.
 * You can choose the cryptographic checksum that is stored in the patch file.
   Available options are (MD5, SHA1, SHA256 and SHA512). You can select the same
-  checksum in the patch file as you use for your cryptographic signatures. Note:
-  That's only for convenience, for not security, since if you cannot trust the
-  patch file, you can also not trust the cryptographic checksum in the patch
-  file. The final target file must be verified another external tool.
+  checksum in the patch file as you use for your cryptographic signatures.
+  Note: That's only for convenience, not for security, since if you cannot
+  trust the patch file, you can also not trust the cryptographic checksum in
+  the patch file. Another external tool must verify the final target file or
+  patch input file.
 * Special cases, source or target file has zero length, are handled.
 * Using the wrong source file/device in `blockdiff patch` is handled
   gracefully. Every source block is checked by CRC32. This catches simple human
@@ -133,8 +135,8 @@ license text see files `LICENSE.GPLv2.txt` and `LICENSE.GPLv3.txt` or visit
 [GNU.org Licenses](https://www.gnu.org/licenses/).
 
 I chose not to license the program as *GPLv3 only*, because the normal company
-lawyer freaks out when they hear the license name *GPLv3*. So they can calm
-down and only have to acknowledge the *GPLv2* license text.
+lawyer freaks out when she/he hears the license name *GPLv3*. So she/he can
+calm down and only have to acknowledge the *GPLv2* license text.
 
 
 Algorithm
@@ -231,3 +233,6 @@ of ext2,3,4 images or perdefined for tar.
 
 Add some sort or progress stderr output in 'blockdiff patch'. Currently there
 is no indication that the patch operation is running.
+
+Follow the recommendation of the REUSE documenation by FSF for software
+licenses.

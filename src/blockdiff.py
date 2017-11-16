@@ -346,6 +346,7 @@ def readTargetAndGenPatchCommands(blocksize, hash_alg, source_fd, source_hashtab
               file=sys.stderr)
 
     def printStat(blocks_count, blocks_zero, blocks_ones, blocks_copy, blocks_new):
+        assert blocks_count != 0
         # NOTE: Percentage values and output format should be the nearly
         # the same as for command "info".
         print("%10d (%6.02f %%) zero   %10d (%6.02f %%) ones  %10d (%6.02f %%) copyable  %10d (%6.02f %%) new\r" %

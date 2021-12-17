@@ -19,7 +19,7 @@ the Wikipedia article [Delta Update][wikipedia-delta-update] and [Google's
 Chrome Updater Courgette][google-chrome-courgette].
 
 **NOTE:** The commandline interface and the patch file format of `blockdiff` is
-**not** considered stable yet. Wait for the *1.0.0* release :-)
+**not** considered stable yet. Wait for the *1.0.0* release.
 
 [bsdiff]: http://www.daemonology.net/bsdiff/
 [wikipedia-delta-update]: https://en.wikipedia.org/wiki/Delta_update
@@ -60,7 +60,6 @@ Features:
 * Using a block device as the source file and target file in `blockdiff patch`
   is supported.  You can write the produced disk image directly to the device.
 
-
 Limitations (Or *Keep in mind*):
 
 * **Does not work** on arbitrary binary files (like executables, images, audio or
@@ -77,10 +76,9 @@ Limitations (Or *Keep in mind*):
 Homepage, Code and Contribution
 -------------------------------
 
-The project's wobsites are:
-
-    https://www.stefanchrist.eu/projects/blockdiff
-    https://github.com/lengfeld/blockdiff
+There is a [project's wobsite](https://www.stefanchrist.eu/projects/blockdiff/),
+but it contains the same information as the
+[github repo](https://github.com/lengfeld/blockdiff/).
 
 The source code can be found in the git repositories:
 
@@ -89,11 +87,11 @@ The source code can be found in the git repositories:
 
 If you found a bug or want to brainstrom about additional features, open a
 issue on github. To contribute code, open a pull request on github or just send
-patches to `contact AAT stefanchrist DOOT eu`. There is no mailing list yet.
+patches to [stefan+blockdiff@lengfeld.xyz](mailto:stefan+blockdiff@lengfeld.xyz).
 
 
-Documentation and Install
--------------------------
+Documentation and Installation
+------------------------------
 
 To generate the manpage and documentation just execute:
 
@@ -218,7 +216,7 @@ generated target file in the command `blockdiff patch`.
 Patch File Format
 -----------------
 
-Goals:
+Goals and spec:
 
 * Streamable. Consumer and produce don't need to seek in the patch file.
 * File format knows it's filesize and has a magic number in the header. It can
@@ -272,7 +270,7 @@ sudo mkfs.ubifs --max-leb-cnt 16384 -m 2048 -e 131072 ubifs.0.10.0.img -x none -
 
 $  blockdiff  diff ubifs.0.9.0.img ubifs.0.10.0.img t.patch
 
-slengfeld@marvin:~/git/blockdiff$ time bsdiff  ubifs.0.9.0.img ubifs.0.9.0.img bsdiff.0.10.0.patch
+$ time bsdiff  ubifs.0.9.0.img ubifs.0.9.0.img bsdiff.0.10.0.patch
 real	3m20.795s
 user	3m19.308s
 sys	0m1.484s

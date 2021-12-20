@@ -182,7 +182,7 @@ BLOCKDIFF
 The source code of **blockdiff** is licensed under *GLPv2* and *GPLv3*.  The
 project hompage is
 
-    https://www.stefanchrist.eu/projects/blockdiff
+    https://stefan.lengfeld.xyz/projects/blockdiff
 
 and the github repository is
 

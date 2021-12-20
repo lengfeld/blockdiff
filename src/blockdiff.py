@@ -3,7 +3,7 @@
 
 #   blockdiff - block based binary patch tool
 #
-#   Copyright (C) 2017 Stefan Lengfeld <contact@stefanchrist.eu>
+#   Copyright (C) 2017 Stefan Lengfeld <stefan@lengfeld.xyz>
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -1329,7 +1329,7 @@ def nocommand(args, parser):
 def main():
     parser = ArgumentParser(description="Generate and apply patch files for block based file or disk formats.",
                             epilog="""Licensed under *GPLv2* and *GPLv3*. See https://www.gnu.org/licenses/.
-Homepage: https://www.stefanchrist.eu/projects/blockdiff
+Homepage: https://stefan.lengfeld.xyz/projects/blockdiff
 """)
     parser.add_argument("--version", dest="version",
                         action="store_true", default=False,

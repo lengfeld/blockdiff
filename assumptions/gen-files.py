@@ -3,7 +3,7 @@
 
 #   blockdiff - block based binary patch tool
 #
-#   Copyright (C) 2017 Stefan Lengfeld <contact@stefanchrist.eu>
+#   Copyright (C) 2017 Stefan Lengfeld <stefan@lengfeld.xyz>
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by

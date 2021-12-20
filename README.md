@@ -76,7 +76,7 @@ Limitations (Or *Keep in mind*):
 Homepage, Code and Contribution
 -------------------------------
 
-There is a [project's wobsite](https://www.stefanchrist.eu/projects/blockdiff/),
+There is a [project's wobsite](https://stefan.lengfeld.xyz/projects/blockdiff/),
 but it contains the same information as the
 [github repo](https://github.com/lengfeld/blockdiff/).
 

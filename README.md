@@ -83,7 +83,6 @@ but it contains the same information as the
 The source code can be found in the git repositories:
 
     $ git clone https://github.com/lengfeld/blockdiff
-    $ git clone https://git.stefanchrist.eu/blockdiff.git
 
 If you found a bug or want to brainstrom about additional features, open a
 issue on github. To contribute code, open a pull request on github or just send

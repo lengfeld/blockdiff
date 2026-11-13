@@ -262,18 +262,21 @@ IDEA: `block diff` should produce file format for `bspatch`. So the patch can
 be applied with the normal bspatch tool.
 
 test ubifs: #
-mkfs.ubifs -r xx  -m 1024 -e 15360 -c 2000 ubifs.img
-NAND Chip 8GiB (MX60LF8G18AC): 2K page size, 128K blocksize
-# for two gibs of ubifs space
-sudo mkfs.ubifs --max-leb-cnt 16384 -m 2048 -e 131072 ubifs.0.10.0.img -x none -r mnt/
 
-$  blockdiff  diff ubifs.0.9.0.img ubifs.0.10.0.img t.patch
+    $ mkfs.ubifs -r xx  -m 1024 -e 15360 -c 2000 ubifs.img
+    NAND Chip 8GiB (MX60LF8G18AC): 2K page size, 128K blocksize
+    # for two gibs of ubifs space
+    $ sudo mkfs.ubifs --max-leb-cnt 16384 -m 2048 -e 131072 ubifs.0.10.0.img -x none -r mnt/
 
-$ time bsdiff  ubifs.0.9.0.img ubifs.0.9.0.img bsdiff.0.10.0.patch
-real	3m20.795s
-user	3m19.308s
-sys	0m1.484s
--> corrupted patch
+    $ blockdiff  diff ubifs.0.9.0.img ubifs.0.10.0.img t.patch
+
+    $ time bsdiff  ubifs.0.9.0.img ubifs.0.9.0.img bsdiff.0.10.0.patch
+    real	3m20.795s
+    user	3m19.308s
+    sys	0m1.484s
+    -> corrupted patch
+
+    # TODO are these commands here compelete?
 
 Add a `--dry-run` option to `blockdiff patch`. Don't write the target file.
 Just check whether the patch file is not corrupted and all copied blocks are

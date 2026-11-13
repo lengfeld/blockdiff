@@ -1328,7 +1328,7 @@ class TestStandardArguments(unittest.TestCase):
         stdout, _ = p.communicate()
         self.assertEqual(p.returncode, 64)   # 64 == EX_USAGE. See /usr/include/sysexits.h
         self.assertIn(b"usage: blockdiff", stdout)
-        self.assertIn(b"optional arguments:", stdout)
+        self.assertIn(b"options:", stdout)
         self.assertIn(b"positional arguments:", stdout)
 
     def testHelp(self):
@@ -1337,7 +1337,7 @@ class TestStandardArguments(unittest.TestCase):
         # Should be the same behavior 'blockdiff' without a command. See above.
         self.assertEqual(p.returncode, 0)
         self.assertIn(b"usage: blockdiff", stdout)
-        self.assertIn(b"optional arguments:", stdout)
+        self.assertIn(b"options:", stdout)
         self.assertIn(b"positional arguments:", stdout)
 
 

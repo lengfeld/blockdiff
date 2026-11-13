@@ -1,4 +1,3 @@
-
 #   blockdiff - block based binary patch tool
 #
 #   Copyright (C) 2017 Stefan Lengfeld <stefan@lengfeld.xyz>

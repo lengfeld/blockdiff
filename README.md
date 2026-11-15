@@ -111,11 +111,6 @@ To install the program and the manpage system-wide in `/usr` execute:
 For an overview of all Makefile targets execute
 
     $ make help
-    all             Generate documentation
-    tests           Runs the python unit tests
-    check           Runs the pycodestyle source code checker
-    install         Installs program to $(prefix)/
-    help            Show the help prompt
 
 
 Usage Example

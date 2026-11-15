@@ -44,7 +44,7 @@ tests: blockdiff              ### Runs the python unit tests
 # Ignore
 #   E501 line too long (83 > 79 characters)
 .PHONY: check
-check:                        ### Runs the pep8 source code checker
+check:                        ### Runs the pycodestyle source code checker
 	@pycodestyle --ignore E501 blockdiff tests/*.py || true
 
 

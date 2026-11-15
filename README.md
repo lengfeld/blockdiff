@@ -113,7 +113,7 @@ For an overview of all Makefile targets execute
     $ make help
     all             Generate documentation
     tests           Runs the python unit tests
-    check           Runs the pep8 source code checker
+    check           Runs the pycodestyle source code checker
     install         Installs program to $(prefix)/
     help            Show the help prompt
 

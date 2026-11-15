@@ -56,7 +56,7 @@ __hash_algs__ = {"MD5": 2,
 
 
 # Values are in bytes, not bits.
-__digest_lenghts__ = {"MD5": 16,
+__digest_lengths__ = {"MD5": 16,
                       "SHA1": 20,
                       "SHA256": 32,
                       "SHA512": 64}
@@ -433,11 +433,11 @@ class Header():
         self._blocksize = blocksize
         self._source_blockcount = source_blockcount
 
-        if hash_alg not in __digest_lenghts__.keys():
+        if hash_alg not in __digest_lengths__.keys():
             raise ValueError("Hash algorithm '%s' not supported!." % (hash_alg,))
         self._hash_alg = hash_alg
 
-        digest_length = __digest_lenghts__[hash_alg]
+        digest_length = __digest_lengths__[hash_alg]
         if len(source_checksum) != digest_length:
             raise ValueError("Checksum '%s' is not %d bytes long!" % (source_checksum, digest_length))
         self._source_checksum = source_checksum
@@ -783,9 +783,9 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
         for key, value in __hash_algs__.items():
             if value == hash_alg_number:
                 hash_alg = key
-        assert hash_alg in __digest_lenghts__
+        assert hash_alg in __digest_lengths__
 
-    digest_length = __digest_lenghts__[hash_alg]
+    digest_length = __digest_lengths__[hash_alg]
     source_checksum = header_payload_checksum[:digest_length]
 
     source_checksum_padding = header_payload_checksum[digest_length:]
@@ -897,7 +897,7 @@ def readPatch(patch_fd, additional_return_values=[], error_on_no_eof=False, skip
     if len(footer_payload) != __FILE_FOOTER_PAYLOAD_LENGTH__:
         raise FileFormatError("Footer payload must be %d bytes long!" % (__FILE_FOOTER_PAYLOAD_LENGTH__,))
 
-    digest_length = __digest_lenghts__[hash_alg]
+    digest_length = __digest_lengths__[hash_alg]
 
     target_blockcount_in_file, commands_crc32_in_file = struct.unpack("<II", footer_payload[:8])
     target_checksum = footer_payload[8:8 + digest_length]

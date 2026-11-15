@@ -876,8 +876,8 @@ class TestInfo(TestCaseTempFolder):
         p = Popen([BLOCKDIFF, "info", "-"], stdout=PIPE, stdin=PIPE)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
-        self.assertEqual(stdout,
-b"""blocksize 2 B
+        self.assertEqual(stdout, b"""\
+blocksize 2 B
 source-blocks      3
 hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
@@ -919,8 +919,8 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
         p = Popen([BLOCKDIFF, "info", "--fast", "patch"], stdout=PIPE, stdin=PIPE, cwd=dir)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
-        self.assertEqual(stdout,
-b"""blocksize 2 B
+        self.assertEqual(stdout, b"""\
+blocksize 2 B
 source-blocks      3
 hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
@@ -949,8 +949,8 @@ Saving -173 B (-2162.50 %) compared to sending the target file.
         p = Popen([BLOCKDIFF, "info", "-"], stdout=PIPE, stdin=PIPE)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
-        self.assertEqual(stdout,
-b"""blocksize 2 B
+        self.assertEqual(stdout, b"""\
+blocksize 2 B
 source-blocks      3
 hash-algorithm SHA512
 source-checksum 01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101
@@ -981,8 +981,8 @@ Saving -183 B (-2287.50 %) compared to sending the target file.
         p = Popen([BLOCKDIFF, "info", "-"], stdout=PIPE, stdin=PIPE)
         stdout, _ = p.communicate(patch)
         self.assertEqual(p.returncode, 0)
-        self.assertEqual(stdout,
-b"""blocksize 2 B
+        self.assertEqual(stdout, b"""\
+blocksize 2 B
 source-blocks      0
 hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000
@@ -1016,8 +1016,8 @@ Saving -177 B (-4425.00 %) compared to sending the target file.
         p = Popen([BLOCKDIFF, "info", "patch"], stdout=PIPE, cwd=dir)
         stdout, _ = p.communicate()
         self.assertEqual(p.returncode, 0)
-        self.assertEqual(stdout,
-b"""blocksize 2 B
+        self.assertEqual(stdout, b"""\
+blocksize 2 B
 source-blocks      3
 hash-algorithm SHA1
 source-checksum 0000000000000000000000000000000000000000

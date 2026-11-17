@@ -1,6 +1,5 @@
 
-blockdiff
-=========
+# blockdiff
 
 **blockdiff** is a binary patch tool for block based file and disk formats (like
 ext2,3,4 and btrfs). It's similar to [bsdiff] but not as general, because
@@ -26,8 +25,7 @@ Chrome Updater Courgette][google-chrome-courgette].
 [google-chrome-courgette]: https://www.chromium.org/developers/design-documents/software-updates-courgette
 
 
-Features and Limitations
-------------------------
+## Features and Limitations
 
 Features:
 
@@ -73,8 +71,7 @@ Limitations (Or *Keep in mind*):
 * *In-place* patching is **not** supported.
 
 
-Homepage, Code and Contribution
--------------------------------
+## Homepage, Code and Contribution
 
 There is a [project's wobsite](https://stefan.lengfeld.xyz/projects/blockdiff/),
 but it contains the same information as the
@@ -89,8 +86,7 @@ issue on github. To contribute code, open a pull request on github or just send
 patches to [stefan+blockdiff@lengfeld.xyz](mailto:stefan+blockdiff@lengfeld.xyz).
 
 
-Documentation and Installation
-------------------------------
+## Documentation and Installation
 
 To generate the manpage and documentation just execute:
 
@@ -113,14 +109,12 @@ For an overview of all Makefile targets execute
     $ make help
 
 
-Usage Example
--------------
+## Usage Example
 
 See file `blockdiff.md` for examples.
 
 
-License
--------
+## License
 
 The source code of `blockdiff` is licensed under *GPLv2* and *GPLv3*. For the
 license text see files `LICENSE.GPLv2.txt` and `LICENSE.GPLv3.txt` or visit
@@ -131,8 +125,7 @@ lawyer freaks out when she/he hears the license name *GPLv3*. So she/he can
 calm down and only have to acknowledge the *GPLv2* license text.
 
 
-Algorithm
----------
+## Algorithm
 
 Compared to `bsdiff` the diff algorithm in `blockdiff` is braindead simple.
 It's the natural implementation that you would come up yourself if you
@@ -207,8 +200,7 @@ source and target blocks and extra checksums to verify the integrity of the
 generated target file in the command `blockdiff patch`.
 
 
-Patch File Format
------------------
+## Patch File Format
 
 Goals and spec:
 
@@ -235,8 +227,7 @@ Command entries:
 For more details see function `writePatch`.
 
 
-Todos
------
+## Todos
 
 Implement exact properties of supported file sizes. 2^32 or 2^64. Check
 boundary checks with generic implementation that also supports smaller and

@@ -53,7 +53,7 @@ install: blockdiff            ### Installs program to $(prefix)/
 	install -Dm 755 blockdiff $(DESTDIR)/$(prefix)/bin/blockdiff
 
 .PHONY:
-install-doc: blockdiff.1
+install-doc: blockdiff.1     ### Installs manpage to $(mandir)/
 	install -Dm 644 blockdiff.1 $(DESTDIR)/$(man1dir)/blockdiff.1
 
 

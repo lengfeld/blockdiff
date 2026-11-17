@@ -82,8 +82,13 @@ The source code can be found in the git repositories:
     $ git clone https://github.com/lengfeld/blockdiff
 
 If you found a bug or want to brainstrom about additional features, open a
-issue on github. To contribute code, open a pull request on github or just send
+issue on github.
+
+To contribute code, open a pull request on github or just send
 patches to [stefan+blockdiff@lengfeld.xyz](mailto:stefan+blockdiff@lengfeld.xyz).
+When you contribute, please add your sign-off. See [Developer's Certificate of
+Origin](https://developercertificate.org/) for details. It's used in the Linux
+kernel and other projects.
 
 
 ## Documentation and Installation
